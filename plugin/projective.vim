@@ -420,7 +420,7 @@ endfunc
 let s:tree_bnr = 0
 
 func! Hl_tree()
-    let winnr = bufwinnr(s:tree_bnr)
+    let winnr = s:tree_bnr ? bufwinnr(s:tree_bnr) : 0
     if winnr > 0
         let saved_winnr = winnr()
         if saved_winnr !=  winnr | exe winnr 'wincmd w' | endif
