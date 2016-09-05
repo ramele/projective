@@ -114,8 +114,8 @@ endfunc
 
 func! s:new_tree()
     call New_tree()
-    let node = New_node('top')
-    let node.module = 'top'
+    let node = New_node(g:verilog_design_top)
+    let node.module = g:verilog_design_top
 endfunc
 
 func! verilog#Project_init()
@@ -133,7 +133,7 @@ func! verilog#Project_init()
     endif
 
     call Load_tree()
-    if empty(Get_node_by_path(['top']))
+    if empty(Get_node_by_path([g:verilog_design_top]))
         call s:new_tree()
     endif
 
@@ -191,9 +191,10 @@ func! Generate_tree()
     " TODO add cdslib and workdir options
     let cmd = 'cd ' . g:project_make_dir . ';'
                 \ . ' simvision -nosplash -lytdir ' . s:cdn_dir . '/layout -layout tiny'
-                \ . ' -cdslib cds.lib -snapshot worklib.top'
+                \ . ' -snapshot worklib.' . g:verilog_design_top . ':v'
                 \ . ' -memberplugindir ' . s:cdn_dir . '/scope_tree_plugin'
                 \ . ' -input ' . s:cdn_dir . '/tree.tcl'
+    let g:simvision_tree_cmd = cmd " TODO remove
     call job_start(['/bin/sh', '-c', cmd], { 'close_cb': function('s:update_tree') })
 endfunc
 

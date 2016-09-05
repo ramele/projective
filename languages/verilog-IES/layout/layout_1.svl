@@ -96,6 +96,52 @@ pattern .waveWindow0 ::SVToolWindow v1.0 {
 		add uvmconfigviewer 0
 }}
   }
+}} ::Console Console {
+pattern .console0 ::SVToolWindow v1.0 {
+  overall {
+    data windowtype console
+    data geometry 150x150+0+0
+    data windowname Console
+    data istarget 1
+    data sidebar {}
+    data sidebarstornoff {}
+    data linked 0
+    data windowstate normal
+    data toolbars {
+	Standard@Console {items {
+		open 1
+		reload 0
+		opensrc 0
+		opensim 1
+		sep1 1
+		cut 1
+		copy 1
+		paste 1
+		delete 1} position {-pos 1 -row 0 -anchor w} enable 1}
+	Search@Console {items {
+		search 1} position {-pos 2 -row 0 -anchor w} enable 1}
+	Windows@Console {items {
+		design_search 1
+		tools 1
+		send_to 1} position {-pos 4 -row 0 -anchor e} enable 0}
+	sendto {reset
+		add browser 1
+		add waveform 1
+		add source 1
+		add schematic 1
+		add memviewer 1
+		add watchwindow 1
+		add register 1
+		add expression 1
+		add assertbrowser 1
+		add fsmwindow 0
+		add stripechart 0
+		add measurement 0
+		add uvmregviewer 0
+		add uvmseqviewer 0
+		add uvmconfigviewer 0
+}}
+  }
 }}}
     data timestamp 1472936059
     data comment {User-created layout}

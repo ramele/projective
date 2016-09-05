@@ -1,3 +1,4 @@
+"TODO check nomodifiable issue: $vim -> \s -> \/ -> <CR> -> i <-
 "TODO tree update
 "TODO tree functions names
 "TODO add window mappings
@@ -9,7 +10,7 @@ let project_console_sp_mod = 'bo 15'
 let project_fbrowser_sp_mod = 'vert to 45'
 let project_tree_sp_mod = 'vert to 45'
 let project_switcher_sp_mode = 'bo 8'
-let project_dir = '~/project'
+let project_dir = '~/projective'
 
 augroup project_commands
     au!
@@ -30,6 +31,7 @@ command! -nargs=1 Search :call Agrep([<q-args>, s:files, g:project_name . ' sear
 command! Make :call Make()
 
 func! Make()
+    cclo
     call g:Project_make_pre()
 
     let cmd = g:project_make_cmd
@@ -345,7 +347,7 @@ func! s:tree_browser()
     syn match tree_hl3     "|[^|]\+|" contains=tree_conceal
     hi def link tree_hl1   Question
     hi def link tree_hl2   CursorLineNr
-    hi def link tree_hl3   Todo
+    hi def link tree_hl3   Directory
     hi def link tree_icon  Statement
 
     "TODO add user mappings API
