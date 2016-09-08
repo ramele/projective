@@ -88,52 +88,61 @@ func! s:open_file(cmd)
     exe a:cmd Project_fbrowser_get(line)
 endfunc
 
+func! s:fuzzy_cb(ch, msg)
+    if a:msg == '--'
+        let s:fuzzy_done = 1
+    else
+        call add(s:files_ids, a:msg)
+    endif
+endfunc
+
 func! s:fuzzy_file_finder()
     if !exists('s:files') | return | endif
+    if !exists('s:fuzzy_perl')
+        let s:fuzzy_perl = globpath(&rtp, 'perl/fuzzyfind.pl')
+    endif
     call s:set_window('Files-browser', '', 0, g:project_fbrowser_sp_mod)
     map <silent> <buffer> <CR>          :call <SID>open_file('e')<CR>
     map <silent> <buffer> <2-LeftMouse> :call <SID>open_file('e')<CR>
     map <silent> <buffer> t             :call <SID>open_file('tabe')<CR>
     map <silent> <buffer> s             :call <SID>open_file('sp')<CR>
     setlocal bexpr=Project_fbrowser_get(v:beval_lnum)
-    "TODO rank and sort the matches
     "TODO add history
-    let files_stack = [range(0, len(s:files)-1)]
+    let s:files_ids = range(0, len(s:files)-1)
     let filter_str = ''
+    let files = Project_expand('files.p')
     setlocal modifiable
-    let s:files_ids = files_stack[-1]
     call s:display_files(1)
-    echo 'Search file> '
+    echo 'find files> '
+    let job = job_start(s:fuzzy_perl . ' ' . files, {'out_cb': function('s:fuzzy_cb')})
+    let channel = job_getchannel(job)
     let ch = getchar() " TODO
     while nr2char(ch) != "\<CR>" && nr2char(ch) != "\<Esc>"
 	if 0 " TODO illegal input
 	    let ch = getchar()
 	    continue
 	endif
+        let s:fuzzy_done = 0
+        let s:files_ids = []
 	if ch != "\<BS>"
-	    let filter_str .= nr2char(ch)
-	    let pattern = substitute(filter_str,'.', '&[^/]\\{-}', 'g')
-	    let pattern = substitute(pattern,'\.','\\.','g')
-	    let pattern .= '[^/]*$'
-	    let _ids = []
-	    for i in s:files_ids
-		if s:files[i] =~ pattern
-		    call add(_ids, i)
-		endif
-	    endfor
-	    call add(files_stack, _ids)
-	    let s:files_ids = _ids
-	elseif filter_str != ''
-	    let filter_str = filter_str[:-2]
-	    call remove(files_stack, -1)
-	    let s:files_ids = files_stack[-1]
+            let filter_str .= nr2char(ch)
+	    call ch_sendraw(channel, nr2char(ch) . "\n")
+	else
+            if filter_str != ''
+                let filter_str = filter_str[:-2]
+            endif
+	    call ch_sendraw(channel, "<\n")
 	endif
+        while !s:fuzzy_done
+            sleep 10m
+        endwhile
 	call s:display_files(1)    
-	echo 'Search> ' . filter_str
+	echo 'find files> ' . filter_str
 	let ch = getchar()
     endwhile
     call s:display_files(0)
     setlocal nomodifiable
+    call job_stop(job)
 endfunc
 
 func! s:display_files(avail_space)
@@ -236,7 +245,8 @@ func! s:project_select()
     setlocal nowrap
     setlocal cursorline
 
-    map <silent> <buffer> <CR> :call <SID>project_init(substitute(getline('.'), '\s\+', '', '')) \| bw!<CR>
+    map <silent> <buffer> <CR> :call <SID>project_init(getline('.')) \| bw!<CR>
+    map <silent> <buffer> e    :call <SID>edit_project()<CR>
     
     let projects = map(glob(g:project_dir . '/*/init.vim', 0, 1), {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
     setlocal modifiable
@@ -274,6 +284,14 @@ func! s:project_init(name)
     let s:files = Project_read_file('files.p')
     exe 'source' Project_expand('init.vim')
     exe 'call' g:project_type . '#Project_init()'
+endfunc
+
+func! s:edit_project()
+    let saved_p = g:project_name
+    let g:project_name = getline('.')
+    bw!
+    exe 'tabe' Project_expand('init.vim')
+    let g:project_name = saved_p
 endfunc
 
 func! s:set_window(bufname, title, return, sp_mod)
