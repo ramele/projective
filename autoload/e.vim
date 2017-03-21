@@ -1,4 +1,4 @@
-" Project file for e (Specman)
+" Projective e (Specman) extension
 "
 func! s:get_file_long(path, file)
     return (a:file =~ '^[/~$]' ? a:file : a:path . '/' . a:file)
@@ -20,8 +20,8 @@ func! s:get_text(stop_pat, include)
     return substitute(s, '\s\+', ' ', 'g')
 endfunc
 
-func! s:make()
-    let s:lines   = readfile(g:project_make_dir . '/' . g:e_log_file)
+func! s:read_sn_logfile()
+    let s:lines   = readfile(g:projective_make_dir . '/' . g:projective_e_log_file)
     let s:lnum    = 0
     let s:len     = len(s:lines)
     let my_qf     = []
@@ -41,7 +41,7 @@ func! s:make()
 	    for f in f_list
 		let m = matchlist(f, '\v\f{-}(\w+)\.e')
 		if m != []
-                    let file = s:get_file_long(g:project_make_dir, m[0])
+                    let file = s:get_file_long(g:projective_make_dir, m[0])
 		    let e_modules[m[1]] = file
                     call add(files, file)
 		endif
@@ -69,24 +69,24 @@ func! s:make()
 		let errl = s:get_text('@\w\|\.e', 1)
 		let m = matchlist(errl, '\v\sat line (\d+) in (\@)?(\f+)')
 		if m != []
-		    let fn = (m[2] == '' ? s:get_file_long(g:project_make_dir, m[3]) : e_modules[m[3]])
+		    let fn = (m[2] == '' ? s:get_file_long(g:projective_make_dir, m[3]) : e_modules[m[3]])
 		    call add(my_qf, {'filename': fn, 'lnum': m[1], 'text': msg, 'type': 'E'})
 		endif
 	    endif
 	endif
 	let s:lnum += 1
     endwhile
-    call Project_add_files(files)
+    call Projective_set_files(files)
     unlet s:lines
     return my_qf
 endfunc
 
 """""""""""""""""""""""""""""""
-func! e#Project_init()
-    let g:Project_make_post = function('s:make')
-    echo g:project_type . ' init done!'
+func! e#Projective_init()
+    let g:Projective_after_make = function('s:read_sn_logfile')
+    echo g:projective_project_type . ' init done!'
 endfunc
 
-func! e#Project_cleanup()
-    echo g:project_type . ' cleanup done!'
+func! e#Projective_cleanup()
+    echo g:projective_project_type . ' cleanup done!'
 endfunc

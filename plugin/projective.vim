@@ -1,63 +1,62 @@
-"TODO check nomodifiable issue: $vim -> \s -> \/ -> <CR> -> i <-
-"TODO tree update
-"TODO tree functions names
-"TODO add window mappings
-"TODO add make clean (bang to :Make)
-"TODO manage special buffers properly (set/open/close/toggle)
+let projective_make_console     = 1
+let projective_console_sp_mod   = 'bo 15'
+let projective_fbrowser_sp_mod  = 'vert to 45'
+let projective_tree_sp_mod      = 'vert to 45'
+let projective_switcher_sp_mode = 'bo 8'
+let projective_dir              = '~/projective'
 
-let project_make_console = 1
-let project_console_sp_mod = 'bo 15'
-let project_fbrowser_sp_mod = 'vert to 45'
-let project_tree_sp_mod = 'vert to 45'
-let project_switcher_sp_mode = 'bo 8'
-let project_dir = '~/projective'
-
-augroup project_commands
+augroup projective_commands
     au!
-    au VimLeave * if exists('g:project_type')
-                \ | exe 'call' g:project_type . '#Project_cleanup()'
+    au VimLeave * if exists('g:projective_project_type')
+                \ | exe 'call' g:projective_project_type . '#Projective_cleanup()'
                 \ | endif
 augroup END
 
 """"""""""""""""""""""""""""""""""""""""""""""""
 " search by Agrep
-"TODO check avialability
 """"""""""""""""""""""""""""""""""""""""""""""""
-command! -nargs=1 Search :call Agrep([<q-args>, s:files, g:project_name . ' search> ' . <q-args>])
+command! -nargs=1 Search :call s:search(<q-args>)
+
+func! s:search(regexp)
+    if !exists('*Agrep')
+        echoerr 'Projective search requires Agrep plugin to be installed. Get the latest version from https://github.com/ramele/agrep'
+        return
+    endif
+    call Agrep({'regexp': a:regexp, 'files': s:files, 'title': g:projective_project_name . ' search> ' . a:regexp})
+endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
 " make
 """"""""""""""""""""""""""""""""""""""""""""""""
-command! Make :call Make()
+command! -bang Make :call Projective_make(<bang>0)
 
-func! Make()
+func! Projective_make(clean)
     cclo
-    call g:Project_make_pre()
+    call g:Projective_before_make(a:clean)
 
-    let cmd = g:project_make_cmd
-    if g:project_make_dir != ''
-	let dir = expand(g:project_make_dir)
+    let cmd = a:clean ? g:projective_make_clean_cmd : g:projective_make_cmd
+    if g:projective_make_dir != ''
+	let dir = expand(g:projective_make_dir)
 	if !isdirectory(dir)
 	    call mkdir(dir)
 	endif
-	let cmd = 'cd ' . dir . '; ' . g:project_make_cmd
+	let cmd = 'cd ' . dir . '; ' . cmd
     endif
 
-    call Project_run_job(cmd, function('s:make_cb'), g:project_make_console ? 'make' : '')
+    call Projective_run_job(cmd, function('s:make_cb'), g:projective_make_console ? 'make' : '')
 endfunc
 
 func! s:make_cb(channel)
-    let r = g:Project_make_post()
+    let r = g:Projective_after_make()
     if type(r) == type(0)
 	return
     endif
 
     call setqflist(r)
-    if len(getqflist())
+    if !empty(getqflist())
 	call s:close_window('Console')
 	copen
 	redr
-	" TODO better message?
 	echohl WarningMsg | echo len(getqflist()) . ' errors were found!' | echohl None
     else
 	cclose
@@ -73,7 +72,7 @@ map <silent> <leader>/ :call <SID>fuzzy_file_finder()<CR>
 
 set ballooneval
 
-func! Project_fbrowser_get(lnum)
+func! Projective_fbrowser_get(lnum)
     return s:files[s:files_ids[a:lnum-1]]
 endfunc
 
@@ -85,7 +84,7 @@ func! s:open_file(cmd)
         new
     endif
     call s:close_window('Files-browser')
-    exe a:cmd Project_fbrowser_get(line)
+    exe a:cmd Projective_fbrowser_get(line)
 endfunc
 
 func! s:fuzzy_cb(ch, msg)
@@ -101,19 +100,19 @@ func! s:fuzzy_file_finder()
     if !exists('s:fuzzy_perl')
         let s:fuzzy_perl = globpath(&rtp, 'perl/fuzzyfind.pl')
     endif
-    call s:set_window('Files-browser', '', 0, g:project_fbrowser_sp_mod)
+    call s:set_window('Files-browser', '', 0, g:projective_fbrowser_sp_mod)
     map <silent> <buffer> <CR>          :call <SID>open_file('e')<CR>
     map <silent> <buffer> <2-LeftMouse> :call <SID>open_file('e')<CR>
     map <silent> <buffer> t             :call <SID>open_file('tabe')<CR>
     map <silent> <buffer> s             :call <SID>open_file('sp')<CR>
-    setlocal bexpr=Project_fbrowser_get(v:beval_lnum)
+    setlocal bexpr=Projective_fbrowser_get(v:beval_lnum)
     "TODO add history
     let s:files_ids = range(0, len(s:files)-1)
     let filter_str = ''
-    let files = Project_expand('files.p')
+    let files = Projective_path('files.p')
     setlocal modifiable
     call s:display_files(1)
-    echo 'find files> '
+    echo 'find file> '
     let job = job_start(s:fuzzy_perl . ' ' . files, {'out_cb': function('s:fuzzy_cb')})
     let channel = job_getchannel(job)
     let ch = getchar() " TODO
@@ -137,7 +136,7 @@ func! s:fuzzy_file_finder()
             sleep 10m
         endwhile
 	call s:display_files(1)    
-	echo 'find files> ' . filter_str
+	echo 'find file> ' . filter_str
 	let ch = getchar()
     endwhile
     call s:display_files(0)
@@ -163,40 +162,25 @@ func! s:display_files(avail_space)
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
-" Project API
+" Projective API
 """"""""""""""""""""""""""""""""""""""""""""""""
 "TODO call init() function when loading a project (source <lang>.vim only once)
 
-func! Project_set_files(files)
+func! Projective_set_files(files)
     let s:files = a:files
-    call Project_save_file(s:files, 'files.p')
+    call Projective_save_file(s:files, 'files.p')
 endfunc
 
-func! Project_get_files()
+func! Projective_get_files()
     return s:files
 endfunc
 
-" TODO is this function needed?
-func! Project_add_files(files)
-    let fd = {}
-    for f in s:files
-	let fd[f] = 1
-    endfor
-    for f in a:files
-	if !has_key(fd, f)
-	    call add(s:files, f)
-	    let fd[f] = 1
-	endif
-    endfor
-    call Project_save_file(s:files, 'files.p')
+func! Projective_path(fname)
+    return expand(g:projective_dir . '/' . g:projective_project_name . '/' . a:fname)
 endfunc
 
-func! Project_expand(fname)
-    return expand(g:project_dir . '/' . g:project_name . '/' . a:fname)
-endfunc
-
-func! Project_save_file(flines, fname)
-    let fname = Project_expand(a:fname)
+func! Projective_save_file(flines, fname)
+    let fname = Projective_path(a:fname)
     if fname =~ '/'
 	let dir = substitute(fname, '/[^/]*$', '', '')
 	if !isdirectory(dir)
@@ -206,8 +190,8 @@ func! Project_save_file(flines, fname)
     call writefile(a:flines, fname)
 endfunc
 
-func! Project_read_file(fname)
-    let fn = Project_expand(a:fname)
+func! Projective_read_file(fname)
+    let fn = Projective_path(a:fname)
     if glob(fn) != ''
         return readfile(fn)
     else
@@ -215,12 +199,12 @@ func! Project_read_file(fname)
     endif
 endfunc
 
-func! Project_run_job(cmd, close_cb, title)
-    "TODO add 'active' indicator to the console
+func! Projective_run_job(cmd, close_cb, title)
     "TODO check for running job
-    let job_options = { 'close_cb': a:close_cb }
+    let job_options = { 'close_cb': function('s:job_cb', [a:close_cb]) }
     if a:title != ''
-	let s:console_bnr = s:set_window('Console', a:title, 1, g:project_console_sp_mod)
+        let g:projective_job_status = 'Running'
+	let s:console_bnr = s:set_window('Console', a:title, 1, g:projective_console_sp_mod, 1)
 	call extend(job_options, {
 			\ 'out_io': 'buffer',
 			\ 'out_buf': s:console_bnr,
@@ -230,7 +214,13 @@ func! Project_run_job(cmd, close_cb, title)
 			\ 'err_modifiable': 0 })
     endif
 
-    let g:project_job = job_start(['/bin/sh', '-c', a:cmd], job_options)
+    let g:projective_job = job_start(['/bin/sh', '-c', a:cmd], job_options)
+endfunc
+
+func! s:job_cb(func, channel)
+    let g:projective_job_status = 'Done'
+    redraws!
+    call a:func(a:channel)
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
@@ -238,17 +228,17 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 map <silent> <leader>s :call <SID>project_select()<CR>
 
-let g:project_name = ''
+let g:projective_project_name = ''
 
 func! s:project_select()
-    call s:set_window('Switch-project', '', 0, g:project_switcher_sp_mode)
+    call s:set_window('Switch-project', '', 0, g:projective_switcher_sp_mode)
     setlocal nowrap
     setlocal cursorline
 
     map <silent> <buffer> <CR> :call <SID>project_init(getline('.')) \| bw!<CR>
     map <silent> <buffer> e    :call <SID>edit_project()<CR>
     
-    let projects = map(glob(g:project_dir . '/*/init.vim', 0, 1), {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
+    let projects = map(glob(g:projective_dir . '/*/init.vim', 0, 1), {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
     setlocal modifiable
     call setline(1, projects)
     setlocal nomodifiable
@@ -259,7 +249,7 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 let s:empty_func = {-> 0}
 
-func! System(cmd)
+func! Projective_system(cmd)
     "faster than system()
     let out = []
     let job = job_start(['/bin/sh', '-c', a:cmd],
@@ -272,30 +262,32 @@ func! System(cmd)
 endfunc
 
 func! s:project_init(name)
-    if exists('g:project_type')
-	exe 'call' g:project_type . '#Project_cleanup()'
+    if exists('g:projective_project_type')
+	exe 'call' g:projective_project_type . '#Projective_cleanup()'
     endif
-    let g:Project_make_post          = s:empty_func
-    let g:Project_make_pre           = s:empty_func
-    let g:Project_tree_init_node     = s:empty_func
-    let g:Project_tree_user_mappings = s:empty_func " TODO use API and remove when doing cleanup
+    let g:Projective_after_make         = s:empty_func
+    let g:Projective_before_make        = s:empty_func
+    let g:Projective_tree_init_node     = s:empty_func
+    let g:Projective_tree_user_mappings = s:empty_func " TODO use API and remove when doing cleanup
 
-    let g:project_name = a:name
-    let s:files = Project_read_file('files.p')
-    exe 'source' Project_expand('init.vim')
-    exe 'call' g:project_type . '#Project_init()'
+    let g:projective_project_name = a:name
+    let s:files = Projective_read_file('files.p')
+    exe 'source' Projective_path('init.vim')
+    let g:projective_make_dir = expand(g:projective_make_dir)
+
+    exe 'call' g:projective_project_type . '#Projective_init()'
 endfunc
 
 func! s:edit_project()
-    let saved_p = g:project_name
-    let g:project_name = getline('.')
+    let saved_p = g:projective_project_name
+    let g:projective_project_name = getline('.')
     bw!
-    exe 'tabe' Project_expand('init.vim')
-    let g:project_name = saved_p
+    exe 'tabe' Projective_path('init.vim')
+    let g:projective_project_name = saved_p
 endfunc
 
-func! s:set_window(bufname, title, return, sp_mod)
-    "TODO add a function arg for special mappings and settings
+func! s:set_window(bufname, title, return, sp_mod, ...)
+    "TODO use dictionary for special mappings and settings
     let base_win = winnr()
     if bufnr(a:bufname) < 0
 	exe 'silent' a:sp_mod 'new' a:bufname
@@ -304,7 +296,11 @@ func! s:set_window(bufname, title, return, sp_mod)
     else
 	call s:open_window(a:bufname, a:sp_mod)
     endif
-    exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:project_name.']%=%p%%'
+    if a:0
+        exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']\ *%{g:projective_job_status}*%=%p%%'
+    else
+        exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']%=%p%%'
+    endif
     setlocal modifiable
     silent %d _
     setlocal nomodifiable
@@ -334,8 +330,9 @@ endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
 " tree
+"TODO move to autoload
 """"""""""""""""""""""""""""""""""""""""""""""""
-map <leader>t :call <SID>tree_browser()<CR>
+map <leader>t :call Projective_open_tree_browser()<CR>
 
 let node = {
             \ 'id'       : -1,
@@ -349,15 +346,14 @@ let node = {
 	    \ 'hlr'      : 0
 	    \ }
 
-func! s:tree_browser()
-    let s:tree_bnr = s:set_window('Tree', '', 0, g:project_tree_sp_mod)
+func! Projective_open_tree_browser()
+    let s:tree_bnr = s:set_window('Tree', '', 0, g:projective_tree_sp_mod)
     setlocal nowrap
     setlocal conceallevel=3 concealcursor=nvic
 
     map <silent> <buffer> <CR>          : call <SID>toggle_node_under_cursor()<CR>
     map <silent> <buffer> <2-LeftMouse> : call <SID>toggle_node_under_cursor()<CR>
 
-    "TODO leaf icon?
     syn match tree_icon    "[▿▸⎘]"
     syn match tree_conceal "[|!:]"    conceal contained
     syn match tree_hl1     "![^!]\+!" contains=tree_conceal
@@ -369,19 +365,19 @@ func! s:tree_browser()
     hi def link tree_icon  Statement
 
     "TODO add user mappings API
-    call g:Project_tree_user_mappings()
+    call g:Projective_tree_user_mappings()
 
     setlocal modifiable
     call s:display_tree(0, g:nodes[0])
     setlocal nomodifiable
 endfunc
 
-func! New_tree()
+func! Projective_new_tree()
     unlet! g:nodes
     let g:nodes = []
 endfunc
 
-func! New_node(name)
+func! Projective_new_node(name)
     let node = deepcopy(g:node)
     call add(g:nodes, node)
     let node.id = len(g:nodes) - 1
@@ -389,26 +385,26 @@ func! New_node(name)
     return node
 endfunc
 
-func! New_child(node, child)
+func! Projective_new_child(node, child)
     call add(a:node.children, a:child.id)
     let a:child.parent = a:node.id
 endfunc
 
-func! Get_node_by_line(line)
+func! Projective_get_node_by_line(line)
     let s:n_count = 0
     return s:node_count_(g:nodes[0], a:line)
 endfunc
 
-func! Get_parent(node)
+func! Projective_get_parent(node)
     if a:node.parent == -1 | return {} | endif
     return g:nodes[a:node.parent]
 endfunc
 
-func! Get_children(node)
+func! Projective_get_children(node)
     return map(copy(a:node.children), {k, v -> g:nodes[v]})
 endfunc
 
-func! Get_path(node)
+func! Projective_get_path(node)
     let scope = [a:node.name]
     let id = a:node.parent
     while id != -1
@@ -437,7 +433,7 @@ endfunc
 
 let s:tree_bnr = 0
 
-func! Hl_tree()
+func! Projective_hl_tree()
     let winnr = s:tree_bnr ? bufwinnr(s:tree_bnr) : 0
     if winnr > 0
         let saved_winnr = winnr()
@@ -463,23 +459,23 @@ func! s:hl_tree_(node)
     endif
 endfunc
 
-func! Set_node_hl(node, hl)
+func! Projective_set_node_hl(node, hl)
     if a:node.hl != a:hl
         let a:node.hl = a:hl
         let a:node.hlr = 1
     endif
 endfunc
 
-func! Save_tree()
+func! Projective_save_tree()
     for n in g:nodes
         let n.hl = 0
         let n.hlr = 0
     endfor
-    call Project_save_file([string(g:nodes)], 'tree.p')
+    call Projective_save_file([string(g:nodes)], 'tree.p')
 endfunc
 
-func! Load_tree()
-    let m = Project_read_file('tree.p')
+func! Projective_load_tree()
+    let m = Projective_read_file('tree.p')
     if empty(m)
         let g:nodes = []
     else
@@ -499,7 +495,7 @@ endfunc
 
 func! s:display_tree(line, node)
     let s:lines = []
-    call s:display_tree_(a:node, repeat('  ', len(Get_path(a:node))-1))
+    call s:display_tree_(a:node, repeat('  ', len(Projective_get_path(a:node))-1))
     if a:line
 	call append(a:line, s:lines)
     else
@@ -521,12 +517,12 @@ endfunc
 func! s:toggle_node_under_cursor()
     let save_cursor = getcurpos()
     let line = line('.')
-    let node = Get_node_by_line(line)
+    let node = Projective_get_node_by_line(line)
     setlocal modifiable
     call s:remove_node_view(line, node)
     let node.expanded = !node.expanded
     if !node.cached
-        call g:Project_tree_init_node(node)
+        call g:Projective_tree_init_node(node)
     endif
     call s:display_tree(line-1, node)
     setlocal nomodifiable
