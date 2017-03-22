@@ -189,6 +189,7 @@ func! verilog#Projective_cleanup()
     call Projective_save_tree()
     unlet s:modules
     unlet s:files
+    unlet g:projective_verilog_64_bit
 
     unmap <leader>va
     unmap <leader>vv
@@ -407,7 +408,7 @@ func! Simvision_connect()
     let file = expand(g:projective_make_dir . '/projective.tcl')
     let simvision_port = s:find_free_port()
     call writefile(['startServer ' . simvision_port], file)
-    let flag_64 = matchstr(g:projective_make_cmd, '-64')
+    let flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT' : ''
     let g:simvision_cmd = 'cd ' . g:projective_make_dir . '; ' .
      \ 'simvision ' . flag_64 . ' -nosplash -schematic -snapshot worklib.' . g:projective_verilog_design_top . ':v ' .
      \ '-memberplugindir ' . s:cdn_dir . '/scope_tree_plugin ' .
