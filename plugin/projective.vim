@@ -28,7 +28,8 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 " make
 """"""""""""""""""""""""""""""""""""""""""""""""
-command! -bang Make :call Projective_make(<bang>0)
+command! -bang Make     : call Projective_make(<bang>0)
+command!       Makekill : call job_stop(projective_job)
 
 func! Projective_make(clean)
     cclo

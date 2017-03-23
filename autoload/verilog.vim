@@ -52,12 +52,12 @@ func! s:make_post()
     elseif empty(my_qf)
         " TODO add job handle
         call job_start(['/bin/sh', '-c',
-                    \ 'grep "^file:\|^\s*module\>" ' . log . ' | sed -e "s/^file: /-/; s/^\s*module \w*\.\(\w*\):.*/\1/"'],
+                    \ 'grep "^file:\|^\s*module\>" ' . log . ' | sed "s/^file: /-/; s/^\s*module \w*\.\(\w*\):.*/\1/"'],
                     \ {'close_cb': function('s:update_db')})
         let args = s:syntax_check_dir . '/ncvlog.args'
         call job_start(['/bin/sh', '-c',
                     \ 'touch ' . args . '; ' .
-                    \ 'grep "^Include:" ' . log . ' | sed -e "s/^Include:/-incdir/; s+/[^/]* (.*++" >> ' . args . '; ' .
+                    \ 'grep "^Include:" ' . log . ' | sed "s/^Include:/-incdir/; s+/[^/]* (.*++" >> ' . args . '; ' .
                     \ 'sort -u -o ' . args . ' ' . args],
                     \ {'close_cb': function('s:close_args')})
     endif
@@ -96,16 +96,21 @@ func! s:update_db(channel)
     call Projective_save_file([string(s:modules)], 'modules.p')
 "    echo 'Updating `defines...'
     let cmd = "grep -h '^\\s*`define' " . join(s:files)
-    call Projective_save_file([cmd], '.tmp_exec.sh')
-    let cmdf = Projective_path('.tmp_exec.sh')
-    let perm = getfperm(cmdf)
-    if perm[2] != 'x'
-	call setfperm(cmdf, 'rwx' . perm[3:])
-    endif
+    let cmdf = s:set_cmd_file([cmd], '.grep_defines')
     call job_start(['/bin/sh', '-c', cmdf], {
                 \ 'out_io': 'file',
 		\ 'out_name' : s:syntax_check_dir . '/defines.v',
 		\ 'close_cb': function( 's:close_defines')})
+endfunc
+
+func! s:set_cmd_file(cmd, file)
+    call Projective_save_file(a:cmd, a:file)
+    let cmdf = Projective_path(a:file)
+    let perm = getfperm(cmdf)
+    if perm[2] != 'x'
+	call setfperm(cmdf, 'rwx' . perm[3:])
+    endif
+    return cmdf
 endfunc
 
 func! s:close_defines(channel)
@@ -154,15 +159,21 @@ func! verilog#Projective_init()
         let s:get_scope_pl = s:cdn_dir . '/get_scope.pl'
     endif
 
+    let flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
+    let g:simvision_cmd = 'cd ' . g:projective_make_dir . ';' .
+                        \ ' simvision ' . flag_64 . '-nosplash -snapshot ' . g:projective_verilog_design_top .
+                        \ ' -memberplugindir ' . s:cdn_dir . '/scope_tree_plugin'
+    let g:simvision_server_cmd = g:simvision_cmd . ' -input ' . s:cdn_dir . '/server.tcl'
+
     augroup verilog_mini_make
 	au!
-	au BufWritePost *.v call s:syntax_check()
-	au BufWritePost *.v call s:get_instances_map()
-        au BufEnter *.v if !s:event_ignore
+	au BufWritePost *.v,*.sv call s:syntax_check()
+	au BufWritePost *.v,*.sv call s:get_instances_map()
+        au BufEnter *.v,*.sv if !s:event_ignore
                     \ | call s:update_cur_scope()
                     \ | call s:update_hl('')
                     \ | endif
-        au CursorMoved *.v call s:hl_path()
+        au CursorMoved *.v,*.sv call s:hl_path()
         " TODO vim_dev
 "        au BufLeave quickfix let s:global_qf_open = 0
     augroup END
@@ -189,7 +200,8 @@ func! verilog#Projective_cleanup()
     call Projective_save_tree()
     unlet s:modules
     unlet s:files
-    unlet g:projective_verilog_64_bit
+    unlet! g:projective_verilog_64_bit
+    unlet! g:projective_verilog_grid
 
     unmap <leader>va
     unmap <leader>vv
@@ -202,10 +214,22 @@ endfunc
 " hierarchy
 """"""""""""""""""""""""""""""""""""""""""""""""
 func! Generate_tree()
+    echo 'Getting Design hierarchy from SimVision. Please wait!'
     let ftime = getftime(s:tree_file) " TODO print_scope_tree is not really blocking
-    call s:simvision_eval('print_scope_tree')
+    if exists('g:projective_verilog_grid')
+        let cmdf = s:set_cmd_file([g:simvision_cmd . ' -input projective.tcl'], '.simvision_tree')
+        let file = expand(g:projective_make_dir . '/projective.tcl')
+        call writefile(['print_scope_tree', 'exit'], file)
+        call system(g:projective_verilog_grid . ' ' . cmdf . ' &')
+    else
+        call s:simvision_eval('print_scope_tree')
+    endif
     while getftime(s:tree_file) == ftime
         sleep 100m
+    endwhile
+    while getftime(s:tree_file) != ftime
+        let ftime = getftime(s:tree_file)
+        sleep 1
     endwhile
     echo 'Design hierarchy was updated!'
     call s:new_tree()
@@ -376,12 +400,10 @@ func! s:get_schematic()
 endfunc
 
 func! s:find_free_port()
-    let nmap = systemlist('nmap -p 4000-6000 --open localhost')
+    let ss = systemlist("ss -natu | awk '{print $5}' | sed 's/.*://' | sort -u")
     let open_ports = {}
-    for p in nmap
-        if p =~ '^\d\+/tcp'
-            let open_ports[matchstr(p, '^\d\+')] = 1
-        endif
+    for p in ss
+        let open_ports[p] = 1
     endfor
     for i in range(4000, 6000)
         if !has_key(open_ports, i)
@@ -408,12 +430,8 @@ func! Simvision_connect()
     let file = expand(g:projective_make_dir . '/projective.tcl')
     let simvision_port = s:find_free_port()
     call writefile(['startServer ' . simvision_port], file)
-    let flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT' : ''
-    let g:simvision_cmd = 'cd ' . g:projective_make_dir . '; ' .
-     \ 'simvision ' . flag_64 . ' -nosplash -schematic -snapshot worklib.' . g:projective_verilog_design_top . ':v ' .
-     \ '-memberplugindir ' . s:cdn_dir . '/scope_tree_plugin ' .
-     \ '-input ' . s:cdn_dir . '/server.tcl -input projective.tcl &'
-     call system(g:simvision_cmd)
+    call system(g:simvision_server_cmd . ' -input projective.tcl &')
+    echo 'Connecting to SimVision...'
     call timer_start(1000, function('s:simvision_connect_try', [simvision_port]), {'repeat': 60}) 
 endfunc
 
@@ -423,7 +441,7 @@ func! s:simvision_connect_try(port, timer)
         let g:simvision_chs[g:projective_project_name] = {}
         let g:simvision_chs[g:projective_project_name].ch = g:simvision_ch
         let g:simvision_chs[g:projective_project_name].port = a:port
-        echo 'Successfully connected to Simvision!'
+        echo 'Successfully connected to SimVision!'
         call timer_stop(a:timer)
     endif
 endfunc
