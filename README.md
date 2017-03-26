@@ -1,5 +1,5 @@
 # Projective
-### _Real IDE in Vim_
+### Real IDE in Vim
 
 _**This plugin is under development**_
 
@@ -15,10 +15,10 @@ Main features:
 * Integration with SimVision (schematic Tracer)
 * Fast switch between projects
 
-#### e Language
+#### _e_ Language
 
 ### Requirements
-Vim 8.0
+Vim 8.0, Linux
 
 ### Installation
 You can use your favorite plugin manager or install directly by:
@@ -53,12 +53,15 @@ For verilog projects use:
 ~/projective/my_design/init.vim:
 ```
 " projective init file
+""""""""""""""""""""""
 let projective_project_type       = 'verilog'
 let projective_make_dir           = '~/my_design_snapshot'
 let projective_make_cmd           = 'irun -elaborate -sv -top my_design_tb ~/my_design_files.f -parseinfo include'
 let projective_make_clean_cmd     = projective_make_cmd . ' -clean'
 let projective_verilog_log_file   = 'irun.log'
 let projective_verilog_design_top = 'my_design_tb'
+"let projective_verilog_64_bit    = 1
+"let projective_verilog_grid      = 'nc run'
 ```
 For the `projective_make_cmd` option you can use any command or script that
 eventually calls ncvlog and ncelab, for example - irun. Note that you can use
@@ -74,12 +77,12 @@ For e language projects use the `projective_e_log_file` option.
 In order to use the above features, you'll need to build your project (one
 successful build is needed to extract the relevant information from the log
 file). Use `<leader>s` command to open the project selection window. While in
-this window you can use `<Enter>` to choose a project or `e` to edit the
+this window you can hit `<Enter>` to choose a project or `e` to edit the
 project's init.vim file.
 
-_Note:_ `<leader>` by default is backslash. See `:h leader` for more details.
+_Note:_ `<leader>` is backslash by default. See `:h leader` for more details.
 
-To Build a project use `:Make` or `:Make!`. The ! modifier is used to call the
+To build a project use `:Make` or `:Make!`. The ! modifier is used to call the
 make clean command (`projective_make_clean_cmd` instead of `projective_make_cmd`).
 
 If there are compilation or elaboration errors, the quickfix window will be

@@ -29,15 +29,9 @@ func! s:read_sn_logfile()
     let files     = []
     while s:lnum < s:len
 	if s:lines[s:lnum] =~ '^Loading'
-	    let f_line = ''
-	    let j = 0
-	    while s:lines[s:lnum] !~ '\<read\.\.\.\|^$' && j < 10
-		let f_line .= ' ' . s:lines[s:lnum]
-		let s:lnum += 1
-		let j += 1
-	    endwhile
-	    let f_line = substitute(f_line, '^ Loading\|[()]\|\<imported by .*', '', 'g')
-	    let f_list = split(f_line, ' + ')
+	    let msg = s:get_text('\<read\.\.\.\|^$', 0)
+	    let msg = substitute(msg, '^\s*Loading\|[()]\|\<imported by .*', '', 'g')
+	    let f_list = split(msg, ' + ')
 	    for f in f_list
 		let m = matchlist(f, '\v\f{-}(\w+)\.e')
 		if m != []
@@ -76,17 +70,31 @@ func! s:read_sn_logfile()
 	endif
 	let s:lnum += 1
     endwhile
-    call Projective_set_files(files)
+    if empty(my_qf)
+        call Projective_set_files(files)
+    endif
     unlet s:lines
     return my_qf
 endfunc
 
+let s:e_parser = resolve(globpath(&rtp, 'languages/e/e_parser.vim'))
+if s:e_parser != ''
+    exe 'source' s:e_parser
+endif
+
 """""""""""""""""""""""""""""""
 func! e#Projective_init()
     let g:Projective_after_make = function('s:read_sn_logfile')
-    echo g:projective_project_type . ' init done!'
+    if s:e_parser != ''
+        call E_parser_init()
+    endif
+"    echo g:projective_project_type . ' init done!'
 endfunc
 
 func! e#Projective_cleanup()
-    echo g:projective_project_type . ' cleanup done!'
+    if s:e_parser != ''
+        call E_parser_cleanup()
+    endif
+"    echo g:projective_project_type . ' cleanup done!'
 endfunc
+
