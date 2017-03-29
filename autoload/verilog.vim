@@ -219,10 +219,10 @@ func! Generate_tree()
     if exists('g:projective_verilog_grid')
         let cmdf = s:set_cmd_file([g:simvision_cmd . ' -input projective.tcl'], '.simvision_tree')
         let file = expand(g:projective_make_dir . '/projective.tcl')
-        call writefile(['print_scope_tree', 'exit'], file)
+        call writefile(['print_scope_tree -include cells', 'exit'], file)
         call system(g:projective_verilog_grid . ' ' . cmdf . ' &')
     else
-        call s:simvision_eval('print_scope_tree')
+        call s:simvision_eval('print_scope_tree -include cells')
     endif
     while getftime(s:tree_file) == ftime
         sleep 100m
