@@ -9,11 +9,11 @@ _**This plugin is under development**_
 Main features:
 * Asynchronous make and quickfix
 * Automatic syntax checker
-* Fast files navigation (using fuzzy pattern)
+* Fast files navigation (file name fuzzy matching)
 * Design browser
 * Advanced Search
 * Integration with SimVision (schematic Tracer)
-* Fast switch between projects
+* Fast switching between projects
 
 #### _e_ Language
 
@@ -40,7 +40,7 @@ cd ~
 mkdir projective
 ```
 
-Under this directory you can create subdirectories for each project.
+Under this directory you can create sub directories for each project.
 To create a new Verilog project named 'my_design':
 ```
 cd ~/projective
@@ -64,7 +64,7 @@ let projective_verilog_design_top = 'my_design_tb'
 "let projective_verilog_grid      = 'nc run'
 ```
 For the `projective_make_cmd` option you can use any command or script that
-eventually calls ncvlog and ncelab, for example - irun. Note that you can use
+eventually calls ncvlog and ncelab, for example: irun. Note that you can use
 your regular compilation and elaboration script. `-parseinfo include` is the
 only ncvlog flag that should be included if you want the internal syntax
 checker to recognize your -incdir compiler directives.
@@ -75,15 +75,21 @@ For e language projects use the `projective_e_log_file` option.
 
 **Make**  
 In order to use the above features, you'll need to build your project (one
-successful build is needed to extract the relevant information from the log
+successful build is required to extract the relevant information from the log
 file). Use `<leader>s` command to open the project selection window. While in
 this window you can hit `<Enter>` to choose a project or `e` to edit the
 project's init.vim file.
+Alternatively, you can select any project directly by running:
+
+:Projective <project-name>
+
+If <project-name> is not provided then the current project will be reloaded. 
 
 _Note:_ `<leader>` is backslash by default. See `:h leader` for more details.
 
 To build a project use `:Make` or `:Make!`. The ! modifier is used to call the
 make clean command (`projective_make_clean_cmd` instead of `projective_make_cmd`).
+Hit `<C-C>` in the console window to kill the make process.
 
 If there are compilation or elaboration errors, the quickfix window will be
 opened with the relevant errors. See `:h quickfix` for details.
@@ -100,11 +106,11 @@ The Quickfix window will be open automatically if errors have been detected.
 
 **File browser**  
 Use `<leader>/` command to open the file search window. Type few letters from
-the file name, the files list will be adjusted accordingly. The letters do not
-have to be in a consecutive order. Hit `<Enter>` when you're happy with the list
-to return to the window and choose a file from the filtered list. Use `<Enter>`
-to open a file in the previous window, `s` to open it in a split window and `t`
-in a new tab.
+the file name, the files list will be filtered accordingly. The letters do not
+have to be in a consecutive order, or match at the beginning of the file name.
+You can navigate in the filtered list with `<C-J>` and `<C-k>` (or `<Up>` and
+`<Down>`). Hit `<Enter>` to open the file under cursor, `<C-s>` to open it in a
+split window or `<C-t>` to open in a new tab.
 
 **Search**  
 Use `:Search '<pattern>'`. This command will call Agrep with the project's file
@@ -123,6 +129,8 @@ scope. The current scope will be highlighted in the design browser window. When
 the cursor in on an module instance you can use `<leader>vv` to change the
 scope and open the files of the instance under the cursor. `<leader>va` will
 bring you to the scope in which the current module is instanced in.
+Use <F5> in the design browser window to refresh the design tree (useful if it
+has been changed outside of the current vim instance)
 
 **Schematic**  
 Use the `:Simvision` command to open a new SimVision window connected to the

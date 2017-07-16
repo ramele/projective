@@ -1,9 +1,25 @@
-let projective_make_console     = 1
-let projective_console_sp_mod   = 'bo 15'
-let projective_fbrowser_sp_mod  = 'vert to 45'
-let projective_tree_sp_mod      = 'vert to 45'
-let projective_switcher_sp_mode = 'bo 8'
-let projective_dir              = '~/projective'
+" TODO use Agrep like alt-window switch
+" TODO cache projects
+" TODO check files timestamp
+"
+if !exists('projective_make_console')
+    let projective_make_console = 1
+endif
+if !exists('projective_console_sp_mod')
+    let projective_console_sp_mod = 'bo 15'
+endif
+if !exists('projective_fbrowser_sp_mod')
+    let projective_fbrowser_sp_mod = 'bo 10'
+endif
+if !exists('projective_tree_sp_mod')
+    let projective_tree_sp_mod = 'vert to 45'
+endif
+if !exists('projective_switcher_sp_mode')
+    let projective_switcher_sp_mode = 'bo 8'
+endif
+if !exists('projective_dir')
+    let projective_dir = '~/projective'
+endif
 
 augroup projective_commands
     au!
@@ -15,6 +31,7 @@ augroup END
 """"""""""""""""""""""""""""""""""""""""""""""""
 " search by Agrep
 """"""""""""""""""""""""""""""""""""""""""""""""
+" TODO search should take additional grep flags
 command! -nargs=1 Search :call s:search(<q-args>)
 
 func! s:search(regexp)
@@ -28,8 +45,7 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 " make
 """"""""""""""""""""""""""""""""""""""""""""""""
-command! -bang Make     : call Projective_make(<bang>0)
-command!       Makekill : call job_stop(projective_job)
+command! -bang Make :call Projective_make(<bang>0)
 
 func! Projective_make(clean)
     cclo
@@ -56,7 +72,7 @@ func! s:make_cb(channel)
     call setqflist(r)
     if !empty(getqflist())
 	call s:close_window('Console')
-	copen
+	bo copen
 	redr
 	echohl WarningMsg | echo len(getqflist()) . ' errors were found!' | echohl None
     else
@@ -73,21 +89,6 @@ map <silent> <leader>/ :call <SID>fuzzy_file_finder()<CR>
 
 set ballooneval
 
-func! Projective_fbrowser_get(lnum)
-    return s:files[s:files_ids[a:lnum-1]]
-endfunc
-
-func! s:open_file(cmd)
-    let line = line('.')
-    if winnr('$') > 1
-        wincmd p
-    else
-        new
-    endif
-    call s:close_window('Files-browser')
-    exe a:cmd Projective_fbrowser_get(line)
-endfunc
-
 func! s:fuzzy_cb(ch, msg)
     if a:msg == '--'
         let s:fuzzy_done = 1
@@ -101,12 +102,10 @@ func! s:fuzzy_file_finder()
     if !exists('s:fuzzy_perl')
         let s:fuzzy_perl = globpath(&rtp, 'perl/fuzzyfind.pl')
     endif
+    let winid = win_getid()
     call s:set_window('Files-browser', '', 0, g:projective_fbrowser_sp_mod)
-    map <silent> <buffer> <CR>          :call <SID>open_file('e')<CR>
-    map <silent> <buffer> <2-LeftMouse> :call <SID>open_file('e')<CR>
-    map <silent> <buffer> t             :call <SID>open_file('tabe')<CR>
-    map <silent> <buffer> s             :call <SID>open_file('sp')<CR>
-    setlocal bexpr=Projective_fbrowser_get(v:beval_lnum)
+    setlocal cursorline
+    " TODO add an option to display (and match?) full path
     "TODO add history
     let s:files_ids = range(0, len(s:files)-1)
     let filter_str = ''
@@ -116,33 +115,65 @@ func! s:fuzzy_file_finder()
     echo 'find file> '
     let job = job_start(s:fuzzy_perl . ' ' . files, {'out_cb': function('s:fuzzy_cb')})
     let channel = job_getchannel(job)
-    let ch = getchar() " TODO
-    while nr2char(ch) != "\<CR>" && nr2char(ch) != "\<Esc>"
-	if 0 " TODO illegal input
-	    let ch = getchar()
-	    continue
-	endif
-        let s:fuzzy_done = 0
-        let s:files_ids = []
-	if ch != "\<BS>"
-            let filter_str .= nr2char(ch)
-	    call ch_sendraw(channel, nr2char(ch) . "\n")
-	else
-            if filter_str != ''
-                let filter_str = filter_str[:-2]
+    let ch = getchar()
+    let cch = nr2char(ch)
+    while cch != "\<CR>" && cch != "\<Esc>" && cch != "\<C-s>" && cch != "\<C-t>"
+        if cch == "\<C-j>" || ch == "\<Down>"
+            if line('.') < len(s:files_ids)
+                if line('.') == line('$')
+                    call setline(line('$') + 1, matchstr(s:files[s:files_ids[line('$')]], '[^/]*$'))
+                endif
+                norm! j
             endif
-	    call ch_sendraw(channel, "<\n")
-	endif
-        while !s:fuzzy_done
-            sleep 10m
-        endwhile
-	call s:display_files(1)    
-	echo 'find file> ' . filter_str
+        elseif cch == "\<C-k>" || ch == "\<Up>"
+            if line('.') > 1
+                norm! k
+            endif
+	else
+            let s:fuzzy_done = 0
+            let s:files_ids = []
+            if ch != "\<BS>"
+                let filter_str .= cch
+                call ch_sendraw(channel, cch . "\n")
+            else
+                if filter_str != ''
+                    let filter_str = filter_str[:-2]
+                endif
+                call ch_sendraw(channel, "<\n")
+            endif
+            while !s:fuzzy_done
+                sleep 10m
+            endwhile
+            call s:display_files(1)    
+            call clearmatches()
+            let i = 0
+            let hl = '\v.*' . substitute(filter_str, '.', '&.{-}', 'g')
+            while i < len(filter_str)
+                call matchadd('Title', substitute(hl, '\%'. (5+i*5) . 'c.', '\\zs&\\ze', '')) 
+                let i += 1
+            endwhile
+        endif
+        redr
+        echo 'find file> ' . filter_str
 	let ch = getchar()
+        let cch = nr2char(ch)
     endwhile
-    call s:display_files(0)
-    setlocal nomodifiable
     call job_stop(job)
+    setlocal nomodifiable
+    call clearmatches()
+    let id = line('.') - 1
+    close
+    call win_gotoid(winid)
+    if cch == "\<Esc>"
+        return
+    elseif cch == "\<CR>"
+        let cmd = 'e'
+    elseif cch == "\<C-s>"
+        let cmd = 'sp'
+    elseif cch == "\<C-t>"
+        let cmd = 'tabe'
+    endif
+    exe cmd s:files[s:files_ids[id]]
 endfunc
 
 func! s:display_files(avail_space)
@@ -216,6 +247,7 @@ func! Projective_run_job(cmd, close_cb, title)
     endif
 
     let g:projective_job = job_start(['/bin/sh', '-c', a:cmd], job_options)
+    let g:projective_ch = job_getchannel(g:projective_job)
 endfunc
 
 func! s:job_cb(func, channel)
@@ -224,10 +256,15 @@ func! s:job_cb(func, channel)
     call a:func(a:channel)
 endfunc
 
+func! Projective_ch_send(msg)
+    call ch_sendraw(g:projective_ch, a:msg . "\n")
+endfunc
+
 """"""""""""""""""""""""""""""""""""""""""""""""
 " Project select
 """"""""""""""""""""""""""""""""""""""""""""""""
 map <silent> <leader>s :call <SID>project_select()<CR>
+command! -nargs=? Projective :call s:project_init(<q-args>)
 
 let g:projective_project_name = ''
 
@@ -239,7 +276,10 @@ func! s:project_select()
     map <silent> <buffer> <CR> :call <SID>project_init(getline('.')) \| bw!<CR>
     map <silent> <buffer> e    :call <SID>edit_project()<CR>
     
-    let projects = map(glob(g:projective_dir . '/*/init.vim', 0, 1), {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
+"    let rt = reltime()
+    let gl = glob(g:projective_dir . '/*/init.vim', 1, 1)
+"    echo 'time: ' . reltimestr((reltime(rt)))
+    let projects = map(gl, {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
     setlocal modifiable
     call setline(1, projects)
     setlocal nomodifiable
@@ -271,7 +311,9 @@ func! s:project_init(name)
     let g:Projective_tree_init_node     = s:empty_func
     let g:Projective_tree_user_mappings = s:empty_func " TODO use API and remove when doing cleanup
 
-    let g:projective_project_name = a:name
+    if a:name != ''
+        let g:projective_project_name = a:name
+    endif
     let s:files = Projective_read_file('files.p')
     exe 'source' Projective_path('init.vim')
     let g:projective_make_dir = expand(g:projective_make_dir)
@@ -299,6 +341,8 @@ func! s:set_window(bufname, title, return, sp_mod, ...)
     endif
     if a:0
         exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']\ *%{g:projective_job_status}*%=%p%%'
+        " TODO set 'interrupted' status safely
+        map <buffer> <C-C> :call job_stop(g:projective_job)<CR>
     else
         exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']%=%p%%'
     endif
@@ -417,12 +461,20 @@ endfunc
 
 func! Get_node_by_path(path, ...)
     if empty(g:nodes) | return {} | endif
+    " TODO add dummy root
+    if a:0 && !a:1.cached
+        call g:Projective_tree_init_node(a:1)
+    endif
     let children = a:0 ? a:1.children : [0]
     for p in a:path
         let found = 0
 	for c in children
-	    if g:nodes[c].name == p
-		let children = g:nodes[c].children
+            let node = g:nodes[c]
+	    if node.name == p
+                if !node.cached
+                    call g:Projective_tree_init_node(node)
+                endif
+		let children = node.children
                 let found = 1
 		break
 	    endif
@@ -432,16 +484,24 @@ func! Get_node_by_path(path, ...)
     return g:nodes[c]
 endfunc
 
+func! Projective_is_empty_tree()
+    return empty(g:nodes)
+endfunc
+
 let s:tree_bnr = 0
 
-func! Projective_hl_tree()
+func! Projective_tree_refresh(mode)
     let winnr = s:tree_bnr ? bufwinnr(s:tree_bnr) : 0
     if winnr > 0
         let saved_winnr = winnr()
         if saved_winnr !=  winnr | exe winnr 'wincmd w' | endif
-        let s:n_count = 0
         setlocal modifiable
-        call s:hl_tree_(g:nodes[0])
+        if a:mode
+            call Projective_open_tree_browser()
+        else
+            let s:n_count = 0
+            call s:hl_tree_(g:nodes[0])
+        endif
         setlocal nomodifiable
         if saved_winnr !=  winnr | exe saved_winnr 'wincmd w' | endif
     endif
