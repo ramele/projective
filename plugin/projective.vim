@@ -342,7 +342,7 @@ func! s:set_window(bufname, title, return, sp_mod, ...)
     if a:0
         exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']\ *%{g:projective_job_status}*%=%p%%'
         " TODO set 'interrupted' status safely
-        map <buffer> <C-C> :call job_stop(g:projective_job)<CR>
+        map <silent> <buffer> <C-C> :call job_stop(g:projective_job)<CR>
     else
         exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']%=%p%%'
     endif
@@ -377,7 +377,7 @@ endfunc
 " tree
 "TODO move to autoload
 """"""""""""""""""""""""""""""""""""""""""""""""
-map <leader>t :call Projective_open_tree_browser()<CR>
+map <silent> <leader>t :call Projective_open_tree_browser()<CR>
 
 let node = {
             \ 'id'       : -1,
@@ -461,27 +461,32 @@ endfunc
 
 func! Get_node_by_path(path, ...)
     if empty(g:nodes) | return {} | endif
-    " TODO add dummy root
-    if a:0 && !a:1.cached
-        call g:Projective_tree_init_node(a:1)
+    " TODO add dummy root!
+    if a:0
+        let path = a:path
+        let node = a:1
+    else
+        if a:path[0] != g:nodes[0].name
+            return {}
+        endif
+        let path = a:path[1:]
+        let node = g:nodes[0]
     endif
-    let children = a:0 ? a:1.children : [0]
-    for p in a:path
+    for p in path
+        if !node.cached
+            call g:Projective_tree_init_node(node)
+        endif
         let found = 0
-	for c in children
-            let node = g:nodes[c]
-	    if node.name == p
-                if !node.cached
-                    call g:Projective_tree_init_node(node)
-                endif
-		let children = node.children
+	for c in node.children
+	    if g:nodes[c].name == p
+                let node = g:nodes[c]
                 let found = 1
 		break
 	    endif
 	endfor
         if !found | return {} | endif
     endfor
-    return g:nodes[c]
+    return node
 endfunc
 
 func! Projective_is_empty_tree()
@@ -527,16 +532,16 @@ func! Projective_set_node_hl(node, hl)
     endif
 endfunc
 
-func! Projective_save_tree()
+func! Projective_save_tree(name)
     for n in g:nodes
         let n.hl = 0
         let n.hlr = 0
     endfor
-    call Projective_save_file([string(g:nodes)], 'tree.p')
+    call Projective_save_file([string(g:nodes)], a:name)
 endfunc
 
-func! Projective_load_tree()
-    let m = Projective_read_file('tree.p')
+func! Projective_load_tree(name)
+    let m = Projective_read_file(a:name)
     if empty(m)
         let g:nodes = []
     else
@@ -600,17 +605,32 @@ func! s:tree_num_view_lines(node)
     return s:n_count
 endfunc
 
+let s:auto_tree_init = 0
+
 func! s:node_count_(node, max)
     let s:n_count += 1
     if s:n_count == a:max
-	return a:node
-    elseif a:node.expanded
-	for s in a:node.children
-	    let node = s:node_count_(g:nodes[s], a:max)
-	    if !empty(node)
-		return node
-	    endif
-	endfor
+        return a:node
+    else
+        if s:auto_tree_init
+            call g:Projective_tree_init_node(a:node)
+            let a:node.expanded = 1
+        endif
+        if a:node.expanded
+            for s in a:node.children
+                let node = s:node_count_(g:nodes[s], a:max)
+                if !empty(node)
+                    return node
+                endif
+            endfor
+        endif
     endif
     return {}
+endfunc
+
+func! Projective_init_recursively(limit)
+    let s:auto_tree_init = 1
+    let s:n_count = 0
+    call s:node_count_(g:nodes[0], a:limit)
+    let s:auto_tree_init = 0
 endfunc
