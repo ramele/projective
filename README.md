@@ -85,9 +85,9 @@ Use `<leader>s` command to open the project selection window. While in this
 window you can hit `<Enter>` to choose a project or `e` to edit the project's
 init.vim file. Alternatively, you can select any project directly by running:
 
-:Projective <project-name>
+`:Projective <project-name>`
 
-If <project-name> is not provided then the current project will be reloaded
+If \<project-name> is not provided then the current project will be reloaded
 (useful to reload the current project after editing its init.vim file).
 
 _Note:_ `<leader>` is backslash by default. See `:h leader` for more details.
@@ -141,7 +141,7 @@ it has been changed outside of the current vim instance).
 When the design browser is available, the scope should be changed automatically
 as you switch buffers. If the scope can't be determined (usually, when there is
 more than one instance of the current module) you can search and set the scope
-to a any instance of the current module using the \vi command.
+to any instance of the current module using the `\vi` command.
 
 **Schematic**  
 The `:Simvision` command will open a new SimVision window connected to the
