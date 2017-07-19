@@ -1,7 +1,7 @@
 " Projective Verilog extension
 
-command! Simvision    : call Simvision_connect()
-command! UpdateDesign : call Generate_tree()
+command! Simvision    :call s:simvision_connect()
+command! UpdateDesign :call s:generate_tree()
 
 func! s:set_make(clean)
     if a:clean
@@ -12,7 +12,9 @@ func! s:set_make(clean)
 endfunc
 
 func! s:syntax_check()
-    if !empty(getqflist({'winid': 1})) && s:last_qf_is_make | return | endif
+    if !empty(getqflist({'winid': 1})) && s:last_qf_is_make
+        return
+    endif
     let s:saved_make_opts = [g:projective_make_dir, g:projective_make_cmd, g:projective_make_console]
     let g:projective_make_dir = s:syntax_check_dir
     let g:projective_make_cmd = 'ncvlog -sv -f ncvlog.args defines.v ' . expand('%:p')
@@ -125,7 +127,7 @@ func! s:new_tree(init_depth)
         let s:prev_hl = {}
     endif
     call Projective_new_tree()
-    let s:active_buf = 0
+    let s:scope_buf = 0
     let node = Projective_new_node(g:projective_verilog_design_top)
     let node.module = g:projective_verilog_design_top
     if a:init_depth
@@ -190,14 +192,17 @@ func! verilog#Projective_init()
 
     let s:syntax_check = 0
     let s:prev_ln = 0
-    let s:instances = {}
     let s:prev_inst = ''
     let s:prev_hl = {}
-    let s:active_buf = 0
+    let s:instances = {}
+    let s:scope_buf = 0
     let s:console_open = 0
     let s:search_inst_buf = 0
     let s:search_inst_active = 0
 
+    if &ft == 'verilog'
+        call s:update_cur_scope()
+    endif
 "    echo g:projective_project_type . ' init done!'
 endfunc
 
@@ -226,20 +231,26 @@ endfunc
 " TODO TEMP. waiting for setbufline() in vimL...
 "
 func! s:console_open()
-    if s:console_open | return | endif
+    if s:console_open
+        return
+    endif
     call Projective_run_job('cat', {->0}, 'Simvision')
     let s:console_open = 1
 endfunc
 
 func! s:console_msg(...)
-    if !s:console_open | return | endif
+    if !s:console_open
+        return
+    endif
     call Projective_ch_send(a:000[a:0-1])
     sleep 1m
     redr
 endfunc
 
 func! s:console_close()
-    if !s:console_open | return | endif
+    if !s:console_open
+        return
+    endif
     sleep 10m
     call job_stop(g:projective_job)
     let s:console_open = 0
@@ -250,7 +261,7 @@ func! s:console_send_job(job)
     call job_start(['/bin/sh', '-c', a:job], {'callback': function('s:console_msg')})
 endfunc
 
-func! Generate_tree()
+func! s:generate_tree()
     call s:console_open()
     call s:console_msg('Getting Design hierarchy from SimVision. Please wait...')
     let s:check_modified = 1
@@ -352,11 +363,13 @@ endfunc
 func! s:update_tree_view()
     " TODO do this async?
     " TODO check if can be done from update_hl()
-    if empty(s:cur_scope) | return | endif
-    if !s:cur_scope.cached
-        call s:scope_init(s:cur_scope)
+    if empty(s:scope)
+        return
     endif
-    let node = s:cur_scope
+    if !s:scope.cached
+        call s:scope_init(s:scope)
+    endif
+    let node = s:scope
     let needs_update = 0
     while !empty(node)
         if !node.expanded
@@ -378,32 +391,33 @@ func! s:edit_scope(node, cmd)
     call search('^\s*module\s\+' . a:node.module)
     norm! zt
     let b:verilog_scope = Projective_get_path(a:node)
-    let s:cur_scope = a:node
+    let s:scope = a:node
     if !s:search_inst_active
         call s:update_tree_view()
         call s:get_instances_map()
         call s:update_hl('')
     endif
+    let s:scope_buf = bufnr('%')
     let s:event_ignore = 0
 endfunc
 
 func! s:update_cur_scope()
     " TODO use timer to make sure buffer was changed manually
-    if s:event_ignore || s:active_buf == bufnr('%') || !s:tree_avail || bufwinnr('Agrep') > -1
+    if s:event_ignore || s:scope_buf == bufnr('%') || !s:tree_avail || bufwinnr('Agrep') > -1
         return
     endif
-    let s:active_buf = bufnr('%')
+    let s:scope_buf = bufnr('%')
     if exists('b:verilog_scope')
         call s:enable_init_tick()
-        let s:cur_scope = Get_node_by_path(b:verilog_scope)
+        let s:scope = Get_node_by_path(b:verilog_scope)
         call s:disable_init_tick()
     else
-        let s:cur_scope = {}
+        let s:scope = {}
     endif
     call s:update_tree_view()
     call s:get_instances_map()
     call s:update_hl('')
-    if empty(s:cur_scope)
+    if empty(s:scope)
         call s:search_inst()
     endif
 endfunc
@@ -442,7 +456,7 @@ func! s:search_inst_cb(channel)
                 call add(b:verilog_scope, m)
             endif
         endfor
-        let s:active_buf = 0
+        let s:scope_buf = 0
         call s:update_cur_scope()
         echo 'verilog: Scope was updated to ' . join(b:verilog_scope, '.') 
     elseif s:n_instances > 1
@@ -462,7 +476,9 @@ func! s:find_instance()
         endwhile
     endif
     " TODO message
-    if s:n_instances == 0 | return | endif
+    if s:n_instances == 0
+        return
+    endif
     let [s:b_nodes, s:b_tree_file] = [g:nodes, s:tree_file]
     let s:tree_file = s:search_inst_file
     let s:event_ignore = 1 " will be reset in edit_scope()
@@ -477,15 +493,17 @@ func! s:restore_tree()
     let [g:nodes, s:tree_file] = [s:b_nodes, s:b_tree_file]
     call Projective_open_tree_browser()
     let s:search_inst_active = 0
-    let s:active_buf = 0
+    let s:scope_buf = 0
     wincmd p
 endfunc
 
 func! s:get_instances_map()
     " is not compatible with old grep (<= 2.5.1)
     let s:instances = {}
-    if empty(s:cur_scope) | return | endif
-    let inst = map(Projective_get_children(s:cur_scope), {k, v -> v.name})
+    if empty(s:scope)
+        return
+    endif
+    let inst = map(Projective_get_children(s:scope), {k, v -> v.name})
     let cmd = 'grep -onE ''\<(' . join(inst, '|') . ')\>\s*($|\(|/[/*])|\);'' ' . expand('%')
                 \ . ' | grep -A 1 '':[^)]'''
     call job_start(['sh', '-c', cmd], {'close_cb': function('s:get_instances_map_cb')})
@@ -496,7 +514,9 @@ func! s:get_instances_map_cb(channel)
     let inst_lnum = 0
     while ch_status(a:channel) == 'buffered'
 	let line = ch_read(a:channel)
-        if line[0] == '-' | continue | endif
+        if line[0] == '-'
+            continue
+        endif
 	let l = matchstr(line, '^\d\+')
         let t = matchstr(line, ':\zs\()\|\w\+\)')
 	if t[0] != ')'
@@ -513,31 +533,44 @@ endfunc
 
 " TODO add protection
 func! s:scope_up()
-    let node = Projective_get_parent(s:cur_scope)
-    call s:edit_scope(node, 'e')
+    let node = Projective_get_parent(s:scope)
+    if empty(node)
+        echohl WarningMsg | echo  'Already at the top hierarchy' | echohl None
+    else
+        call s:edit_scope(node, 'e')
+    endif
 endfunc
 
 func! s:scope_down()
-    let node = Get_node_by_path([s:instances[line('.')]], s:cur_scope)
-    call s:edit_scope(node, 'e')
+    let inst = get(s:instances, line('.'), '')
+    if inst == ''
+        echohl WarningMsg | echo 'Not a module instance' | echohl None
+    else
+        let node = Get_node_by_path([inst], s:scope)
+        call s:edit_scope(node, 'e')
+    endif
 endfunc
 
 " TODO use node ids for speed?
 func! s:hl_path()
-    if line('.') == s:prev_ln | return | endif
+    if line('.') == s:prev_ln
+        return
+    endif
     let s:prev_ln = line('.')
     let cur_inst = get(s:instances, line('.'), '')
-    if cur_inst == s:prev_inst | return | endif
+    if cur_inst == s:prev_inst
+        return
+    endif
     let s:prev_inst = cur_inst
     call s:update_hl(cur_inst)
 endfunc
 
 func! s:update_hl(cur_inst)
     if a:cur_inst == ''
-        let hl_scope = s:cur_scope
+        let hl_scope = s:scope
         let hl_val = 2
     else
-        let hl_scope = Get_node_by_path([a:cur_inst], s:cur_scope)
+        let hl_scope = Get_node_by_path([a:cur_inst], s:scope)
         let hl_val = 3
     endif
     while !empty(s:prev_hl)
@@ -547,7 +580,9 @@ func! s:update_hl(cur_inst)
     let s:prev_hl = hl_scope
     while !empty(hl_scope)
 	call Projective_set_node_hl(hl_scope, hl_val)
-	if hl_val > 1 | let hl_val -= 1 | endif
+        if hl_val > 1
+            let hl_val -= 1
+        endif
         let hl_scope = Projective_get_parent(hl_scope)
     endwhile
     call Projective_tree_refresh(0)
@@ -558,7 +593,7 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 
 func! s:simvision_eval(cmd)
-    call Simvision_connect()
+    call s:simvision_connect()
     while !exists('g:simvision_ch') || ch_status(g:simvision_ch) != 'open'
         sleep 100m
     endwhile
@@ -570,7 +605,7 @@ func! s:get_word_under_cursor()
 endfunc
 
 func! s:send_to_schematic()
-    let design_obj = join(Projective_get_path(s:cur_scope), '.') . '.' . s:get_word_under_cursor()
+    let design_obj = join(Projective_get_path(s:scope), '.') . '.' . s:get_word_under_cursor()
     let cmd = 'schematic add ' . design_obj . '; select set ' . design_obj
     if s:simvision_eval(cmd) == 'Error: no schematic window name entered'
         call s:simvision_eval('schematic new')
@@ -611,7 +646,7 @@ if !exists('simvision_chs')
     let simvision_chs = {}
 endif
 
-func! Simvision_connect()
+func! s:simvision_connect()
     " TODO move to check_sv_connection()
     " TODO handle error
     let s:sv_close_console = !s:console_open
@@ -631,7 +666,9 @@ func! Simvision_connect()
 
     let file = expand(g:projective_make_dir . '/projective.tcl')
     let simvision_port = s:find_free_port()
-    if simvision_port == 0 | return | endif
+    if simvision_port == 0
+        return
+    endif
     call writefile(['startServer ' . simvision_port], file)
     let cmd = g:simvision_server_cmd . ' -input projective.tcl'
     call s:console_open()

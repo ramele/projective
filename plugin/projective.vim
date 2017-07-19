@@ -98,7 +98,9 @@ func! s:fuzzy_cb(ch, msg)
 endfunc
 
 func! s:fuzzy_file_finder()
-    if !exists('s:files') | return | endif
+    if !exists('s:files')
+        return
+    endif
     if !exists('s:fuzzy_perl')
         let s:fuzzy_perl = globpath(&rtp, 'perl/fuzzyfind.pl')
     endif
@@ -147,9 +149,9 @@ func! s:fuzzy_file_finder()
             call s:display_files(1)    
             call clearmatches()
             let i = 0
-            let hl = '\v.*' . substitute(filter_str, '.', '&.{-}', 'g')
+            let hl = '\v\c.*' . substitute(filter_str, '.', '&.{-}', 'g')
             while i < len(filter_str)
-                call matchadd('Title', substitute(hl, '\%'. (5+i*5) . 'c.', '\\zs&\\ze', '')) 
+                call matchadd('Title', substitute(hl, '\%'. (7+i*5) . 'c.', '\\zs&\\ze', '')) 
                 let i += 1
             endwhile
         endif
@@ -441,7 +443,9 @@ func! Projective_get_node_by_line(line)
 endfunc
 
 func! Projective_get_parent(node)
-    if a:node.parent == -1 | return {} | endif
+    if a:node.parent == -1
+        return {}
+    endif
     return g:nodes[a:node.parent]
 endfunc
 
@@ -460,7 +464,9 @@ func! Projective_get_path(node)
 endfunc
 
 func! Get_node_by_path(path, ...)
-    if empty(g:nodes) | return {} | endif
+    if empty(g:nodes)
+        return {}
+    endif
     " TODO add dummy root!
     if a:0
         let path = a:path
@@ -484,7 +490,9 @@ func! Get_node_by_path(path, ...)
 		break
 	    endif
 	endfor
-        if !found | return {} | endif
+        if !found
+            return {}
+        endif
     endfor
     return node
 endfunc
@@ -499,7 +507,9 @@ func! Projective_tree_refresh(mode)
     let winnr = s:tree_bnr ? bufwinnr(s:tree_bnr) : 0
     if winnr > 0
         let saved_winnr = winnr()
-        if saved_winnr !=  winnr | exe winnr 'wincmd w' | endif
+        if saved_winnr !=  winnr
+            exe winnr 'wincmd w'
+        endif
         setlocal modifiable
         if a:mode
             call Projective_open_tree_browser()
@@ -508,7 +518,9 @@ func! Projective_tree_refresh(mode)
             call s:hl_tree_(g:nodes[0])
         endif
         setlocal nomodifiable
-        if saved_winnr !=  winnr | exe saved_winnr 'wincmd w' | endif
+        if saved_winnr !=  winnr
+            exe saved_winnr 'wincmd w'
+        endif
     endif
 endfunc
 

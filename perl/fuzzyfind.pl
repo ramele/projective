@@ -22,8 +22,8 @@ while (<STDIN>) {
         $len = length($in_pattern);
         @_cur_idxs = ();
         foreach $i (@cur_idxs) {
-            if ($files[$i] =~ /$pattern/) {
-                $files[$i] =~ /.*\K$pattern/;
+            if ($files[$i] =~ /$pattern/i) {
+                $files[$i] =~ /.*\K$pattern/i;
                 if ($len == 1) {
                     push @_cur_idxs, [length($files[$i]), $i];
                 }

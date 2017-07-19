@@ -23,12 +23,12 @@ sub get_module_scope_tree {
    @scope_tree_lines = <FH>;
    close FH;
 
-   while (@scope_tree_lines && ($scope_tree_lines[0] !~ /\b$top_module\b/)) {
+   while (@scope_tree_lines && ($scope_tree_lines[0] !~ /\($top_module\)/)) {
       shift @scope_tree_lines;
    }
 
    #add leaves
-   @leaves_lines_in_use = grep { $scope_tree_lines[$_] =~ /\b$module_name\b/ } 0..$#scope_tree_lines;
+   @leaves_lines_in_use = grep { $scope_tree_lines[$_] =~ /\($module_name\)/ } 0..$#scope_tree_lines;
 
    #add the top level in case there are leaves
    if (@leaves_lines_in_use) {
@@ -44,7 +44,7 @@ sub get_module_scope_tree {
    @lines_in_use = sort {$a <=> $b} @lines_in_use;
 
    foreach my $line_index (@lines_in_use) {
-      if ($scope_tree_lines[$line_index]  =~ /\b$module_name\b/) {
+      if ($scope_tree_lines[$line_index]  =~ /\($module_name\)/) {
          $scope_tree_lines[$line_index] =~ s/\+/\-/;
       }
 
