@@ -19,7 +19,7 @@ foreach $ln (@inst_lines) {
     $prev_off = 10000;
     $l = $ln - 1;
     while ($prev_off) {
-        last if $l <= $prev_inst_ln;
+        last if $l < $prev_inst_ln;
         $lines[$l] =~ /[+-]-/;
         $off = $-[0];
         if ($off < $prev_off) {
