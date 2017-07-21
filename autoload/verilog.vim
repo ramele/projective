@@ -432,7 +432,7 @@ func! s:search_inst()
         let s:find_instance_sync = 0
         return
     endif
-    let cmd = s:search_inst_pl . ' ' . s:tree_file . ' ' . g:projective_verilog_design_top . ' ' . s:module_name
+    let cmd = s:search_inst_pl . ' ' . s:tree_file . ' ' . s:module_name
     call job_start(['sh', '-c', cmd],
                 \ { 'out_io': 'file',
 		\ 'out_name' : s:search_inst_file,
@@ -440,7 +440,7 @@ func! s:search_inst()
 endfunc
 
 func! s:search_inst_cb(channel)
-    let s:n_instances = Projective_system('grep "\--" ' . s:search_inst_file . ' | wc -l')[0]
+    let s:n_instances = matchstr(Projective_system('head -1 ' . s:search_inst_file)[0], '\d\+')
     if s:find_instance_sync
         let s:find_instance_sync = 0
         return
