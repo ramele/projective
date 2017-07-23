@@ -394,6 +394,11 @@ let node = {
 	    \ }
 
 func! Projective_open_tree_browser()
+    if !exists('g:nodes') || empty(g:nodes)
+        " TODO not complete
+        echohl WarningMsg | echo  'Projective: No tree to display' | echohl None
+        return
+    endif
     let s:tree_bnr = s:set_window('Tree', '', 0, g:projective_tree_sp_mod)
     setlocal nowrap
     setlocal conceallevel=3 concealcursor=nvic
@@ -426,8 +431,8 @@ endfunc
 
 func! Projective_new_node(name)
     let node = deepcopy(g:node)
+    let node.id = len(g:nodes)
     call add(g:nodes, node)
-    let node.id = len(g:nodes) - 1
     let node.name = a:name
     return node
 endfunc

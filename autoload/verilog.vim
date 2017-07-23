@@ -125,9 +125,10 @@ endfunc
 func! s:new_tree(init_depth)
     if !s:search_inst_active
         let s:prev_hl = {}
+        let s:scope_buf = 0
+        let s:search_inst_buf = 0
     endif
     call Projective_new_tree()
-    let s:scope_buf = 0
     let node = Projective_new_node(g:projective_verilog_design_top)
     let node.module = g:projective_verilog_design_top
     if a:init_depth
@@ -155,14 +156,19 @@ func! verilog#Projective_init()
         call mkdir(s:syntax_check_dir)
     endif
 
-    call Projective_load_tree('tree.p')
-    if Projective_is_empty_tree()
-        call s:new_tree(0)
-    endif
-
     let s:tree_file = expand(g:projective_make_dir . '/scope_tree.txt')
     let s:search_inst_file = expand(g:projective_make_dir . '/scope_search.txt')
-    let s:tree_avail = (glob(s:tree_file) != '')
+    let s:design_loaded = (glob(s:tree_file) != '')
+    if s:design_loaded
+        call Projective_load_tree('tree.p')
+        if Projective_is_empty_tree()
+            call s:new_tree(2)
+        else
+            " TODO close tree when not available
+            call Projective_tree_refresh(1)
+        endif
+    endif
+
     if !exists('s:cdn_dir')
         " TODO how to manage lang directories?
         let s:cdn_dir = globpath(&rtp, 'languages/verilog-IES')
@@ -211,7 +217,9 @@ func! verilog#Projective_cleanup()
     if exists('g:simvision_ch') && ch_status(g:simvision_ch) == 'open'
         call ch_close(g:simvision_ch)
     endif
-    call Projective_save_tree('tree.p')
+    if s:design_loaded
+        call Projective_save_tree('tree.p')
+    endif
     unlet s:modules
     unlet s:files
     unlet! g:projective_verilog_64_bit
@@ -288,7 +296,7 @@ func! s:generate_tree_cb(timer)
     else
         if new_ftime == s:tree_ftime
             call s:console_msg('Design hierarchy was updated!')
-            let s:tree_avail = 1
+            let s:design_loaded = 1
             call s:new_tree(2)
             call s:console_close()
             call timer_stop(a:timer)
@@ -335,15 +343,17 @@ endfunc
 func! s:tree_mappings()
     map <silent> <buffer> e :call <SID>edit_tree_scope()<CR>
     map <silent> <buffer> <F5> :call <SID>refresh_tree()<CR>
+    map <silent> <buffer> <Esc> :call <SID>restore_tree()<CR>
     " TODO add autocmd to restore tree
 endfunc
 
 func! s:refresh_tree()
-    if !s:search_inst_active
-        let s:tree_avail = (glob(s:tree_file) != '')
-        if s:tree_avail
-            call s:new_tree(2)
-        endif
+    if s:search_inst_active
+        return
+    endif
+    let s:design_loaded = (glob(s:tree_file) != '')
+    if s:design_loaded
+        call s:new_tree(2)
     endif
 endfunc
 
@@ -354,7 +364,7 @@ func! s:edit_tree_scope()
     " TODO open a new window if needed
     let s:event_ignore = 1 " will be reset in edit_scope()
     silent! wincmd p
-    call <SID>edit_scope(node, 'e')
+    call s:edit_scope(node, 'e')
     if s:search_inst_active
         call s:restore_tree()
     endif
@@ -392,18 +402,18 @@ func! s:edit_scope(node, cmd)
     norm! zt
     let b:verilog_scope = Projective_get_path(a:node)
     let s:scope = a:node
+    let s:scope_buf = bufnr('%')
     if !s:search_inst_active
         call s:update_tree_view()
         call s:get_instances_map()
         call s:update_hl('')
     endif
-    let s:scope_buf = bufnr('%')
     let s:event_ignore = 0
 endfunc
 
 func! s:update_cur_scope()
     " TODO use timer to make sure buffer was changed manually
-    if s:event_ignore || s:scope_buf == bufnr('%') || !s:tree_avail || bufwinnr('Agrep') > -1
+    if s:event_ignore || s:scope_buf == bufnr('%') || !s:design_loaded
         return
     endif
     let s:scope_buf = bufnr('%')
@@ -425,6 +435,7 @@ endfunc
 let s:find_instance_sync = 0
 
 func! s:search_inst()
+    " TODO use buffer locker
     let s:n_instances = 0
     let ml = search('^\s*module\>', 'bn')
     let s:module_name = matchstr(getline(ml), '^\s*module\s\+\zs\w\+')
@@ -432,6 +443,7 @@ func! s:search_inst()
         let s:find_instance_sync = 0
         return
     endif
+    let s:search_inst_buf = bufnr('%')
     let cmd = s:search_inst_pl . ' ' . s:tree_file . ' ' . s:module_name
     call job_start(['sh', '-c', cmd],
                 \ { 'out_io': 'file',
@@ -441,13 +453,10 @@ endfunc
 
 func! s:search_inst_cb(channel)
     let s:n_instances = matchstr(Projective_system('head -1 ' . s:search_inst_file)[0], '\d\+')
-    if s:find_instance_sync
-        let s:find_instance_sync = 0
-        return
-    endif
 
-    let s:search_inst_buf = bufnr('%')
-    if s:n_instances == 1
+    if s:n_instances == 0
+        echo 'verilog: Couldn''t find instances of ' . s:module_name
+    elseif s:n_instances == 1
         let b:verilog_scope = []
         let lines = readfile(s:search_inst_file)
         for l in lines
@@ -458,12 +467,12 @@ func! s:search_inst_cb(channel)
         endfor
         let s:scope_buf = 0
         call s:update_cur_scope()
-        echo 'verilog: Scope was updated to ' . join(b:verilog_scope, '.') 
-    elseif s:n_instances > 1
+        echo 'verilog: Found one instance, updated scope to ' . join(b:verilog_scope, '.') 
+    elseif !s:find_instance_sync
         echo 'verilog: Found ' . s:n_instances . ' instances of ' . s:module_name . '. Type \vi to select an instance'
-    else
-        let s:search_inst_buf = 0
-        echo 'verilog: Couldn''t find instances of ' . s:module_name
+    endif
+    if s:find_instance_sync
+        let s:find_instance_sync = 0
     endif
 endfunc
 
@@ -472,27 +481,31 @@ func! s:find_instance()
         let s:find_instance_sync = 1
         call s:search_inst()
         while s:find_instance_sync
-            sleep 100m
+            sleep 50m
         endwhile
     endif
-    " TODO message
-    if s:n_instances == 0
-        return
+    if s:n_instances > 1
+        let [s:b_nodes, s:b_tree_file] = [g:nodes, s:tree_file]
+        let s:tree_file = s:search_inst_file
+        let s:event_ignore = 1
+        let s:search_inst_active = 1
+        call s:enable_init_tick()
+        call s:new_tree(20)
+        call s:disable_init_tick()
+        call Projective_open_tree_browser()
+        redr
+        echo 'verilog: ' . s:module_name . ' instance tree (' . s:n_instances . ' nodes found)'
     endif
-    let [s:b_nodes, s:b_tree_file] = [g:nodes, s:tree_file]
-    let s:tree_file = s:search_inst_file
-    let s:event_ignore = 1 " will be reset in edit_scope()
-    let s:search_inst_active = 1
-    call s:enable_init_tick()
-    call s:new_tree(20)
-    call s:disable_init_tick()
-    call Projective_open_tree_browser()
 endfunc
 
 func! s:restore_tree()
+    if !s:search_inst_active
+        return
+    endif
     let [g:nodes, s:tree_file] = [s:b_nodes, s:b_tree_file]
     call Projective_open_tree_browser()
     let s:search_inst_active = 0
+    let s:event_ignore = 0
     let s:scope_buf = 0
     wincmd p
 endfunc
@@ -531,8 +544,19 @@ func! s:get_instances_map_cb(channel)
     endwhile
 endfunc
 
-" TODO add protection
+func! s:check_design()
+    if s:design_loaded
+        return 1
+    else
+        echohl WarningMsg | echo  'Design is not loaded. Run :UpdateDesign first' | echohl None
+        return 0
+    endif
+endfunc
+
 func! s:scope_up()
+    if !s:check_design()
+        return
+    endif
     let node = Projective_get_parent(s:scope)
     if empty(node)
         echohl WarningMsg | echo  'Already at the top hierarchy' | echohl None
@@ -542,6 +566,9 @@ func! s:scope_up()
 endfunc
 
 func! s:scope_down()
+    if !s:check_design()
+        return
+    endif
     let inst = get(s:instances, line('.'), '')
     if inst == ''
         echohl WarningMsg | echo 'Not a module instance' | echohl None
@@ -605,6 +632,9 @@ func! s:get_word_under_cursor()
 endfunc
 
 func! s:send_to_schematic()
+    if !s:check_design()
+        return
+    endif
     let design_obj = join(Projective_get_path(s:scope), '.') . '.' . s:get_word_under_cursor()
     let cmd = 'schematic add ' . design_obj . '; select set ' . design_obj
     if s:simvision_eval(cmd) == 'Error: no schematic window name entered'
@@ -614,6 +644,9 @@ func! s:send_to_schematic()
 endfunc
 
 func! s:get_schematic()
+    if !s:check_design()
+        return
+    endif
     let cs = s:simvision_eval('schematic curselection')
     let cs = substitute(cs, '^.*::', '', '')
     let sp = split(cs, '\.')
