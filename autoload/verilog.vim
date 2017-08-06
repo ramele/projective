@@ -429,11 +429,7 @@ func! s:edit_scope(node, cmd)
     endif
 endfunc
 
-func! s:update_cur_scope()
-    " TODO use timer to make sure buffer was changed manually
-    if s:event_ignore || s:scope_buf == bufnr('%') || !s:design_loaded
-        return
-    endif
+func! s:set_scope()
     let s:scope_buf = bufnr('%')
     if exists('b:verilog_scope')
         call s:enable_init_tick()
@@ -445,6 +441,14 @@ func! s:update_cur_scope()
     call s:update_tree_view()
     call s:get_instances_map()
     call s:update_hl('')
+endfunc
+
+func! s:update_cur_scope()
+    " TODO use timer to make sure buffer was changed manually
+    if s:event_ignore || s:scope_buf == bufnr('%') || !s:design_loaded
+        return
+    endif
+    call s:set_scope()
     if empty(s:scope)
         call s:search_inst()
     endif
@@ -484,7 +488,7 @@ func! s:search_inst_cb(channel)
             endif
         endfor
         let s:scope_buf = 0
-        call s:update_cur_scope()
+        call s:set_scope()
         echo 'verilog: Found one instance, updated scope to ' . join(b:verilog_scope, '.') 
     elseif !s:find_instance_sync
         echo 'verilog: Found ' . s:n_instances . ' instances of ' . s:module_name . '. Type \vi to select an instance'
