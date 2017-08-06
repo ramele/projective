@@ -124,7 +124,7 @@ endfunc
 
 func! s:new_tree(init_depth)
     if !s:search_inst_active
-        let s:prev_hl = {}
+        let s:hl_scope = {}
         let s:scope_buf = 0
         let s:search_inst_buf = 0
     endif
@@ -187,7 +187,12 @@ func! verilog#Projective_init()
 	au BufWritePost *.v,*.sv call s:syntax_check()
 	au BufWritePost *.v,*.sv call s:get_instances_map()
         au BufEnter *.v,*.sv call s:update_cur_scope()
-        au CursorMoved *.v,*.sv call s:hl_path()
+        au CursorMoved *.v,*.sv call s:cursor_moved()
+        au InsertEnter,BufLeave *.v,*.sv if !empty(timer_info(s:dtimer_id))
+                    \ | call timer_stop(s:dtimer_id)
+                    \ | endif
+                    \ | let s:prev_ln = 0
+                    \ | let s:prev_inst = ''
     augroup END
 
     map <silent> <leader>va :call <SID>scope_up()<CR>
@@ -199,7 +204,7 @@ func! verilog#Projective_init()
     let s:syntax_check = 0
     let s:prev_ln = 0
     let s:prev_inst = ''
-    let s:prev_hl = {}
+    let s:hl_scope = {}
     let s:instances = {}
     let s:scope_buf = 0
     let s:console_open = 0
@@ -341,10 +346,9 @@ func! s:scope_init(node)
 endfunc
 
 func! s:tree_mappings()
-    map <silent> <buffer> e :call <SID>edit_tree_scope()<CR>
-    map <silent> <buffer> <F5> :call <SID>refresh_tree()<CR>
+    map <silent> <buffer> e     :call <SID>edit_tree_scope()<CR>
+    map <silent> <buffer> <F5>  :call <SID>refresh_tree()<CR>
     map <silent> <buffer> <Esc> :call <SID>restore_tree()<CR>
-    " TODO add autocmd to restore tree
 endfunc
 
 func! s:refresh_tree()
@@ -371,8 +375,6 @@ func! s:edit_tree_scope()
 endfunc
 
 func! s:update_tree_view()
-    " TODO do this async?
-    " TODO check if can be done from update_hl()
     if empty(s:scope)
         return
     endif
@@ -393,22 +395,35 @@ func! s:update_tree_view()
     endif
 endfunc
 
-func! s:edit_scope(node, cmd)
-    let s:event_ignore = 1
-    let f = s:files[s:modules[a:node.module]]
-    exe a:cmd f
-    keepj norm! gg
-    call search('^\s*module\s\+' . a:node.module)
-    norm! zt
-    let b:verilog_scope = Projective_get_path(a:node)
-    let s:scope = a:node
-    let s:scope_buf = bufnr('%')
-    if !s:search_inst_active
-        call s:update_tree_view()
-        call s:get_instances_map()
-        call s:update_hl('')
+func! s:get_module_file(module)
+    let i = get(s:modules, a:module, -1)
+    if i > -1
+        return s:files[i]
+    else
+        return ''
     endif
-    let s:event_ignore = 0
+endfunc
+
+func! s:edit_scope(node, cmd)
+    let f = s:get_module_file(a:node.module)
+    if f != ''
+        let s:event_ignore = 1
+        exe a:cmd f
+        keepj norm! gg
+        call search('^\s*module\s\+' . a:node.module)
+        norm! zt
+        let b:verilog_scope = Projective_get_path(a:node)
+        let s:scope = a:node
+        let s:scope_buf = bufnr('%')
+        if !s:search_inst_active
+            call s:update_tree_view()
+            call s:get_instances_map()
+            call s:update_hl('')
+        endif
+        let s:event_ignore = 0
+    else
+        echohl WarningMsg | echo 'Unknown module' | echohl None
+    endif
 endfunc
 
 func! s:update_cur_scope()
@@ -544,17 +559,19 @@ func! s:get_instances_map_cb(channel)
     endwhile
 endfunc
 
-func! s:check_design()
-    if s:design_loaded
-        return 1
-    else
+func! s:check_design(verify_scope)
+    if !s:design_loaded
         echohl WarningMsg | echo  'Design is not loaded. Run :UpdateDesign first' | echohl None
-        return 0
+    elseif a:verify_scope && empty(s:scope)
+        echohl WarningMsg | echo  'Can''t detect design scope' | echohl None
+    else
+        return 1
     endif
+    return 0
 endfunc
 
 func! s:scope_up()
-    if !s:check_design()
+    if !s:check_design(1)
         return
     endif
     let node = Projective_get_parent(s:scope)
@@ -566,7 +583,7 @@ func! s:scope_up()
 endfunc
 
 func! s:scope_down()
-    if !s:check_design()
+    if !s:check_design(1)
         return
     endif
     let inst = get(s:instances, line('.'), '')
@@ -579,8 +596,9 @@ func! s:scope_down()
 endfunc
 
 " TODO use node ids for speed?
-func! s:hl_path()
-    if line('.') == s:prev_ln
+func! s:cursor_moved()
+    let s:moved = 1
+    if line('.') == s:prev_ln || mode() != 'n'
         return
     endif
     let s:prev_ln = line('.')
@@ -592,25 +610,74 @@ func! s:hl_path()
     call s:update_hl(cur_inst)
 endfunc
 
-func! s:update_hl(cur_inst)
-    if a:cur_inst == ''
-        let hl_scope = s:scope
-        let hl_val = 2
-    else
-        let hl_scope = Get_node_by_path([a:cur_inst], s:scope)
-        let hl_val = 3
+func! s:signal_direction(tid)
+    if mode() != 'n' || !s:moved || s:hl_scope_file == ''
+        return
     endif
-    while !empty(s:prev_hl)
-        call Projective_set_node_hl(s:prev_hl, 0)
-	let s:prev_hl = Projective_get_parent(s:prev_hl)
+    let s:moved = 0
+    let signal = matchstr(getline('.'), '\.\zs\w\+\ze\s*([^)]*\%' . col('.') . 'c')
+    if signal == ''
+        let signal = matchstr(getline('.'), '\.\zs\w\+\ze\s*(')
+    endif
+    if signal != s:prev_signal
+        let s:prev_signal = signal
+        let cmd = 'grep -E ''^\s*,?\s*(input|output|inout)\>.*\<' . signal . '\>'' ' . s:hl_scope_file
+        call job_start(['sh', '-c', cmd], {'close_cb': function('s:signal_direction_cb')})
+    endif
+endfunc
+
+func! s:signal_direction_cb(channel)
+    let dir = ''
+    while ch_status(a:channel) == 'buffered'
+        let m = matchstr(ch_read(a:channel), 'input\|output\|inout')
+        if dir != '' && m != dir
+            let dir = ''
+            break
+        endif
+        let dir = m
     endwhile
-    let s:prev_hl = hl_scope
-    while !empty(hl_scope)
-	call Projective_set_node_hl(hl_scope, hl_val)
+    if dir != s:prev_dir
+        let s:prev_dir = dir
+        if !empty(s:hl_scope) && Projective_get_node_hl(s:hl_scope) =~ '3'
+            call Projective_set_node_hl(s:hl_scope, '3  ' . (dir == 'input' ? '◀' : dir == 'output' ? '▶' : dir == 'inout' ? '◀▶' : ''))
+            call Projective_tree_refresh(0)
+        endif
+    endif
+endfunc
+
+let s:dtimer_id = 0
+
+func! s:update_hl(cur_inst)
+    let prev_node = s:hl_scope
+    if a:cur_inst == ''
+        let s:hl_scope = s:scope
+        let hl_val = 2
+        if !empty(timer_info(s:dtimer_id))
+            call timer_stop(s:dtimer_id)
+        endif
+    else
+        let s:hl_scope = Get_node_by_path([a:cur_inst], s:scope)
+        let hl_val = 3
+        let s:hl_scope_file = s:get_module_file(s:hl_scope.module)
+        let s:prev_dir = ''
+        let s:prev_signal = ''
+        if empty(timer_info(s:dtimer_id))
+            let s:dtimer_id = timer_start(300, function('s:signal_direction'), {'repeat': -1})
+        endif
+    endif
+    let used = {}
+    let node = s:hl_scope
+    while !empty(node)
+	call Projective_set_node_hl(node, hl_val)
+        let used[node.id] = 1
         if hl_val > 1
             let hl_val -= 1
         endif
-        let hl_scope = Projective_get_parent(hl_scope)
+        let node = Projective_get_parent(node)
+    endwhile
+    while !empty(prev_node) && !has_key(used, prev_node.id)
+        call Projective_set_node_hl(prev_node, 0)
+	let prev_node = Projective_get_parent(prev_node)
     endwhile
     call Projective_tree_refresh(0)
 endfunc
@@ -632,7 +699,7 @@ func! s:get_word_under_cursor()
 endfunc
 
 func! s:send_to_schematic()
-    if !s:check_design()
+    if !s:check_design(1)
         return
     endif
     let design_obj = join(Projective_get_path(s:scope), '.') . '.' . s:get_word_under_cursor()
@@ -644,17 +711,17 @@ func! s:send_to_schematic()
 endfunc
 
 func! s:get_schematic()
-    if !s:check_design()
+    if !s:check_design(0)
         return
     endif
     let cs = s:simvision_eval('schematic curselection')
     let cs = substitute(cs, '^.*::', '', '')
     let sp = split(cs, '\.')
     call s:enable_init_tick()
-    let scope = Get_node_by_path(sp[0:-2])
+        let scope = Get_node_by_path(sp[0:-2])
     call s:disable_init_tick()
     call s:edit_scope(scope, 'e')
-    call search('\<' . matchstr(sp[-1], '\w\+') . '\>')
+        call search('\<' . matchstr(sp[-1], '\w\+') . '\>')
     norm! zz
 endfunc
 

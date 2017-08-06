@@ -400,7 +400,7 @@ func! Projective_open_tree_browser()
         return
     endif
     let s:tree_bnr = s:set_window('Tree', '', 0, g:projective_tree_sp_mod)
-    setlocal nowrap
+    setlocal nowrap so=4
     setlocal conceallevel=3 concealcursor=nvic
 
     map <silent> <buffer> <CR>          : call <SID>toggle_node_under_cursor()<CR>
@@ -511,6 +511,8 @@ let s:tree_bnr = 0
 func! Projective_tree_refresh(mode)
     let winnr = s:tree_bnr ? bufwinnr(s:tree_bnr) : 0
     if winnr > 0
+        let saved_ei = &eventignore
+        set ei=all
         let saved_winnr = winnr()
         if saved_winnr !=  winnr
             exe winnr 'wincmd w'
@@ -520,12 +522,15 @@ func! Projective_tree_refresh(mode)
             call Projective_open_tree_browser()
         else
             let s:n_count = 0
+            let s:last_hl = line('.')
             call s:hl_tree_(g:nodes[0])
+            call cursor(s:last_hl, 1)
         endif
         setlocal nomodifiable
         if saved_winnr !=  winnr
             exe saved_winnr 'wincmd w'
         endif
+        let &eventignore = saved_ei
     endif
 endfunc
 
@@ -533,6 +538,9 @@ func! s:hl_tree_(node)
     let s:n_count += 1
     if a:node.hlr
 	call setline(s:n_count, s:node_str(a:node, matchstr(getline(s:n_count), '^ *\ze\S')))
+        if a:node.hl
+            let s:last_hl = s:n_count
+        endif
         let a:node.hlr = 0
     endif
     if a:node.expanded
@@ -543,10 +551,14 @@ func! s:hl_tree_(node)
 endfunc
 
 func! Projective_set_node_hl(node, hl)
-    if a:node.hl != a:hl
+    if string(a:node.hl) != string(a:hl)
         let a:node.hl = a:hl
         let a:node.hlr = 1
     endif
+endfunc
+
+func! Projective_get_node_hl(node)
+    return a:node.hl
 endfunc
 
 func! Projective_save_tree(name)
@@ -566,14 +578,18 @@ func! Projective_load_tree(name)
     endif
 endfunc
 
+let s:hl_dict = {1: '!', 2: ':', 3: '|'}
+
 func! s:node_str(node, indent)
     if a:node.hl
-        let hlc = a:node.hl == 3 ? '|' : a:node.hl == 2 ? ':' : '!'
+        let hlc = s:hl_dict[a:node.hl[0]]
+        let attr = a:node.hl[1:]
     else
         let hlc = ''
+        let attr = ''
     endif
     let sign = a:node.leaf ? '⎘' : a:node.expanded ? '▿' : '▸'
-    return printf('%s%s %s%s%s', a:indent, sign , hlc, a:node.name, hlc)
+    return printf('%s%s %s%s%s%s', a:indent, sign , hlc, a:node.name, hlc, attr)
 endfunc
 
 func! s:display_tree(line, node)
