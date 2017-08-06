@@ -524,7 +524,9 @@ func! Projective_tree_refresh(mode)
             let s:n_count = 0
             let s:last_hl = line('.')
             call s:hl_tree_(g:nodes[0])
-            call cursor(s:last_hl, 1)
+            if line('.') != s:last_hl
+                call cursor(s:last_hl, 1)
+            endif
         endif
         setlocal nomodifiable
         if saved_winnr !=  winnr

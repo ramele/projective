@@ -229,6 +229,9 @@ func! verilog#Projective_cleanup()
     unlet s:files
     unlet! g:projective_verilog_64_bit
     unlet! g:projective_verilog_grid
+    if !empty(timer_info(s:dtimer_id))
+        call timer_stop(s:dtimer_id)
+    endif
 
     unmap <leader>va
     unmap <leader>vv
@@ -679,7 +682,10 @@ func! s:update_hl(cur_inst)
         call Projective_set_node_hl(prev_node, 0)
 	let prev_node = Projective_get_parent(prev_node)
     endwhile
-    call Projective_tree_refresh(0)
+    if a:cur_inst == ''
+        " otherwise will be called from the timer
+        call Projective_tree_refresh(0)
+    endif
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
