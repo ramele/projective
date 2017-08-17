@@ -26,7 +26,23 @@ augroup projective_commands
     au VimLeave * if exists('g:projective_project_type')
                 \ | exe 'call' g:projective_project_type . '#Projective_cleanup()'
                 \ | endif
+    au ColorScheme * call s:save_cursor_hl()
 augroup END
+
+func! s:save_cursor_hl()
+    " this is faster than setting 'gcr'
+    let g:hl_cursor_cmd = 'hi ' . substitute(execute('hi Cursor')[1:], '\s*xxx', '', '')
+endfunc
+
+func! s:hide_cursor()
+    hi! link Cursor Conceal
+endfunc
+
+func! s:show_cursor()
+    exe g:hl_cursor_cmd
+endfunc
+
+call s:save_cursor_hl()
 
 """"""""""""""""""""""""""""""""""""""""""""""""
 " search by Agrep
@@ -87,8 +103,6 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 map <silent> <leader>/ :call <SID>fuzzy_file_finder()<CR>
 
-set ballooneval
-
 func! s:fuzzy_cb(ch, msg)
     if a:msg == '--'
         let s:fuzzy_done = 1
@@ -98,6 +112,8 @@ func! s:fuzzy_cb(ch, msg)
 endfunc
 
 func! s:fuzzy_file_finder()
+    " TODO add an option to display (and match?) full path
+    " TODO add history
     if !exists('s:files')
         return
     endif
@@ -107,8 +123,6 @@ func! s:fuzzy_file_finder()
     let winid = win_getid()
     call s:set_window('Files-browser', '', 0, g:projective_fbrowser_sp_mod)
     setlocal cursorline
-    " TODO add an option to display (and match?) full path
-    "TODO add history
     let s:files_ids = range(0, len(s:files)-1)
     let filter_str = ''
     let files = Projective_path('files.p')
@@ -120,6 +134,7 @@ func! s:fuzzy_file_finder()
     let ch = getchar()
     let cch = nr2char(ch)
     while cch != "\<CR>" && cch != "\<Esc>" && cch != "\<C-s>" && cch != "\<C-t>"
+        call s:hide_cursor()
         if cch == "\<C-j>" || ch == "\<Down>"
             if line('.') < len(s:files_ids)
                 if line('.') == line('$')
@@ -156,6 +171,7 @@ func! s:fuzzy_file_finder()
             endwhile
         endif
         redr
+        call s:show_cursor()
         echo 'find file> ' . filter_str
 	let ch = getchar()
         let cch = nr2char(ch)
@@ -421,6 +437,7 @@ func! Projective_open_tree_browser()
 
     setlocal modifiable
     call s:display_tree(0, g:nodes[0])
+    call s:hl_tree()
     setlocal nomodifiable
 endfunc
 
@@ -515,24 +532,30 @@ func! Projective_tree_refresh(mode)
         set ei=all
         let saved_winnr = winnr()
         if saved_winnr !=  winnr
+            call s:hide_cursor()
             exe winnr 'wincmd w'
         endif
         setlocal modifiable
         if a:mode
             call Projective_open_tree_browser()
         else
-            let s:n_count = 0
-            let s:last_hl = line('.')
-            call s:hl_tree_(g:nodes[0])
-            if line('.') != s:last_hl
-                call cursor(s:last_hl, 1)
-            endif
+            call s:hl_tree()
         endif
         setlocal nomodifiable
         if saved_winnr !=  winnr
             exe saved_winnr 'wincmd w'
+            call s:show_cursor()
         endif
         let &eventignore = saved_ei
+    endif
+endfunc
+
+func! s:hl_tree()
+    let s:n_count = 0
+    let s:last_hl_line = 0
+    call s:hl_tree_(g:nodes[0])
+    if s:last_hl_line && line('.') != s:last_hl_line
+        call cursor(s:last_hl_line, 1)
     endif
 endfunc
 
@@ -540,10 +563,10 @@ func! s:hl_tree_(node)
     let s:n_count += 1
     if a:node.hlr
 	call setline(s:n_count, s:node_str(a:node, matchstr(getline(s:n_count), '^ *\ze\S')))
-        if a:node.hl
-            let s:last_hl = s:n_count
-        endif
         let a:node.hlr = 0
+    endif
+    if a:node.hl
+        let s:last_hl_line = s:n_count
     endif
     if a:node.expanded
 	for c in a:node.children
@@ -564,6 +587,7 @@ func! Projective_get_node_hl(node)
 endfunc
 
 func! Projective_save_tree(name)
+    " TODO refresh the tree before clearing the hl, don't move the cursor
     for n in g:nodes
         let n.hl = 0
         let n.hlr = 0

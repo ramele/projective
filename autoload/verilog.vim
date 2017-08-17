@@ -56,6 +56,7 @@ func! s:make_post()
                     \ 'grep "^file:\|^\s*module\>" ' . log . ' | sed "s/^file: /-/; s/^\s*module \w*\.\(\w*\):.*/\1/"'],
                     \ {'close_cb': function('s:update_db')})
         let args = s:syntax_check_dir . '/ncvlog.args'
+        " TODO handle include path/file
         call job_start(['/bin/sh', '-c',
                     \ 'touch ' . args . '; ' .
                     \ 'grep "^Include:" ' . log . ' | sed "s/^Include:/-incdir/; s+/[^/]* (.*++" >> ' . args . '; ' .
@@ -126,7 +127,7 @@ func! s:new_tree(init_depth)
     if !s:search_inst_active
         let s:hl_scope = {}
         let s:scope_buf = 0
-        let s:search_inst_buf = 0
+        let s:search_inst_module = '~'
     endif
     call Projective_new_tree()
     let node = Projective_new_node(g:projective_verilog_design_top)
@@ -208,7 +209,7 @@ func! verilog#Projective_init()
     let s:instances = {}
     let s:scope_buf = 0
     let s:console_open = 0
-    let s:search_inst_buf = 0
+    let s:search_inst_module = '~'
     let s:search_inst_active = 0
 
     if &ft == 'verilog'
@@ -456,17 +457,20 @@ endfunc
 
 let s:find_instance_sync = 0
 
+func! s:get_cur_module()
+    let ml = search('^\s*module\>', 'bn')
+    return matchstr(getline(ml), '^\s*module\s\+\zs\w\+')
+endfunc
+
 func! s:search_inst()
     " TODO use buffer locker
     let s:n_instances = 0
-    let ml = search('^\s*module\>', 'bn')
-    let s:module_name = matchstr(getline(ml), '^\s*module\s\+\zs\w\+')
-    if s:module_name == ''
+    let s:search_inst_module = s:get_cur_module()
+    if s:search_inst_module == ''
         let s:find_instance_sync = 0
         return
     endif
-    let s:search_inst_buf = bufnr('%')
-    let cmd = s:search_inst_pl . ' ' . s:tree_file . ' ' . s:module_name
+    let cmd = s:search_inst_pl . ' ' . s:tree_file . ' ' . s:search_inst_module
     call job_start(['sh', '-c', cmd],
                 \ { 'out_io': 'file',
 		\ 'out_name' : s:search_inst_file,
@@ -477,7 +481,7 @@ func! s:search_inst_cb(channel)
     let s:n_instances = matchstr(Projective_system('head -1 ' . s:search_inst_file)[0], '\d\+')
 
     if s:n_instances == 0
-        echo 'verilog: Couldn''t find instances of ' . s:module_name
+        echo 'verilog: Couldn''t find instances of ' . s:search_inst_module
     elseif s:n_instances == 1
         let b:verilog_scope = []
         let lines = readfile(s:search_inst_file)
@@ -487,19 +491,16 @@ func! s:search_inst_cb(channel)
                 call add(b:verilog_scope, m)
             endif
         endfor
-        let s:scope_buf = 0
         call s:set_scope()
         echo 'verilog: Found one instance, updated scope to ' . join(b:verilog_scope, '.') 
     elseif !s:find_instance_sync
-        echo 'verilog: Found ' . s:n_instances . ' instances of ' . s:module_name . '. Type \vi to select an instance'
+        echo 'verilog: Found ' . s:n_instances . ' instances of ' . s:search_inst_module . '. Type \vi to select an instance'
     endif
-    if s:find_instance_sync
-        let s:find_instance_sync = 0
-    endif
+    let s:find_instance_sync = 0
 endfunc
 
 func! s:find_instance()
-    if s:search_inst_buf != bufnr('%')
+    if s:search_inst_module != s:get_cur_module()
         let s:find_instance_sync = 1
         call s:search_inst()
         while s:find_instance_sync
@@ -516,7 +517,7 @@ func! s:find_instance()
         call s:disable_init_tick()
         call Projective_open_tree_browser()
         redr
-        echo 'verilog: ' . s:module_name . ' instance tree (' . s:n_instances . ' nodes found)'
+        echo 'verilog: ' . s:search_inst_module . ' instance tree (' . s:n_instances . ' nodes found)'
     endif
 endfunc
 
@@ -654,6 +655,7 @@ endfunc
 
 let s:dtimer_id = 0
 
+" TODO stop timer and refresh tree if there is no hl_scope_file
 func! s:update_hl(cur_inst)
     let prev_node = s:hl_scope
     if a:cur_inst == ''
