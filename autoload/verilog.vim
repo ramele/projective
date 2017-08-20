@@ -3,6 +3,10 @@
 command! Simvision    :call s:simvision_connect()
 command! UpdateDesign :call s:generate_tree()
 
+if !exists('projective_verilog_file_extentions')
+    let projective_verilog_file_extentions = '*.v,*.vp,*.vs,*.sv,*.svp,*.svi,*.svh'
+endif
+
 func! s:set_make(clean)
     if a:clean
         let s:files = []
@@ -185,15 +189,11 @@ func! verilog#Projective_init()
 
     augroup projective_verilog_commands
 	au!
-	au BufWritePost *.v,*.sv call s:syntax_check()
-	au BufWritePost *.v,*.sv call s:get_instances_map()
-        au BufEnter *.v,*.sv call s:update_cur_scope()
-        au CursorMoved *.v,*.sv call s:cursor_moved()
-        au InsertEnter,BufLeave *.v,*.sv if !empty(timer_info(s:dtimer_id))
-                    \ | call timer_stop(s:dtimer_id)
-                    \ | endif
-                    \ | let s:prev_ln = 0
-                    \ | let s:prev_inst = ''
+	exe 'au BufWritePost        ' g:projective_verilog_file_extentions 'call s:syntax_check()'
+	exe 'au BufWritePost        ' g:projective_verilog_file_extentions 'call s:get_instances_map()'
+        exe 'au BufEnter            ' g:projective_verilog_file_extentions 'call s:update_cur_scope()'
+        exe 'au CursorMoved         ' g:projective_verilog_file_extentions 'call s:cursor_moved()'
+        exe 'au InsertEnter,BufLeave' g:projective_verilog_file_extentions 'call s:disable_hl_timer()'
     augroup END
 
     map <silent> <leader>va :call <SID>scope_up()<CR>
@@ -212,7 +212,7 @@ func! verilog#Projective_init()
     let s:search_inst_module = '~'
     let s:search_inst_active = 0
 
-    if &ft == 'verilog'
+    if count(split(g:projective_verilog_file_extentions, ','), substitute(bufname('%'), '.*\.', '*.', '')) 
         call s:update_cur_scope()
     endif
 "    echo g:projective_project_type . ' init done!'
@@ -692,6 +692,14 @@ func! s:update_hl(cur_inst)
         " otherwise will be called from the timer
         call Projective_tree_refresh(0)
     endif
+endfunc
+
+func! s:disable_hl_timer()
+    if !empty(timer_info(s:dtimer_id))
+        call timer_stop(s:dtimer_id)
+    endif
+    let s:prev_ln = 0
+    let s:prev_inst = ''
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
