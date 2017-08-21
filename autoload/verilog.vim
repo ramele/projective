@@ -15,8 +15,10 @@ func! s:set_make(clean)
     endif
 endfunc
 
+let s:pending_make_errors = 0
+
 func! s:syntax_check()
-    if !empty(getqflist({'winid': 1})) && s:last_qf_is_make
+    if !empty(getqflist({'winid': 1})) && s:pending_make_errors || s:syntax_check
         return
     endif
     let s:saved_make_opts = [g:projective_make_dir, g:projective_make_cmd, g:projective_make_console]
@@ -50,7 +52,7 @@ func! s:make_post()
 	    endif
 	endif
     endfor
-    let s:last_qf_is_make = !s:syntax_check && !empty(my_qf)
+    let s:pending_make_errors = !s:syntax_check && !empty(my_qf)
     if s:syntax_check
         let [g:projective_make_dir, g:projective_make_cmd, g:projective_make_console] = s:saved_make_opts
         let s:syntax_check = 0
@@ -668,8 +670,8 @@ func! s:update_hl(cur_inst)
         let s:hl_scope = Get_node_by_path([a:cur_inst], s:scope)
         let hl_val = 3
         let s:hl_scope_file = s:get_module_file(s:hl_scope.module)
-        let s:prev_dir = ''
-        let s:prev_signal = ''
+        let s:prev_dir = '~'
+        let s:prev_signal = '~'
         if empty(timer_info(s:dtimer_id))
             let s:dtimer_id = timer_start(300, function('s:signal_direction'), {'repeat': -1})
         endif
