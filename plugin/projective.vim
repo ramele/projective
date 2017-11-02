@@ -360,7 +360,7 @@ func! s:set_window(bufname, title, return, sp_mod, ...)
     if a:0
         exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']\ *%{g:projective_job_status}*%=%p%%'
         " TODO set 'interrupted' status safely
-        map <silent> <buffer> <C-C> :call job_stop(g:projective_job)<CR>
+        map <silent> <buffer> <C-C> :call job_stop(g:projective_job, 'kill')<CR>
     else
         exe 'setlocal statusline=['.a:bufname.(a:title != '' ? '::'.a:title : '').'\ '.g:projective_project_name.']%=%p%%'
     endif

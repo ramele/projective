@@ -28,7 +28,7 @@ while (<STDIN>) {
                     push @_cur_idxs, [length($files[$i]), $i];
                 }
                 else {
-                    push @_cur_idxs, [($len / ($+[0] - $-[0])) * 500 - $-[0] - (length($files[$i]) - $+[0]), $i];
+                    push @_cur_idxs, [($len / ($+[0] - $-[0])) * 30 - $-[0] - (length($files[$i]) - $+[0]), $i];
                 }
             }
         }

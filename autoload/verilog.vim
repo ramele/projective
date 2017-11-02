@@ -448,7 +448,11 @@ endfunc
 
 func! s:update_cur_scope()
     " TODO use timer to make sure buffer was changed manually
-    if s:event_ignore || s:scope_buf == bufnr('%') || !s:design_loaded
+    if !s:design_loaded
+        let s:scope = {}
+        return
+    endif
+    if s:event_ignore || s:scope_buf == bufnr('%')
         return
     endif
     call s:set_scope()
@@ -488,7 +492,7 @@ func! s:search_inst_cb(channel)
         let b:verilog_scope = []
         let lines = readfile(s:search_inst_file)
         for l in lines
-            let m = matchstr(l, '^\s*[+-]-\zs\w\+')
+            let m = matchstr(l, '^\s*[+-]-\zs\w\+\ze\s\+(')
             if m != ''
                 call add(b:verilog_scope, m)
             endif
@@ -544,6 +548,7 @@ func! s:get_instances_map()
     let inst = map(Projective_get_children(s:scope), {k, v -> v.name})
     let cmd = 'grep -onE ''\<(' . join(inst, '|') . ')\>\s*($|\(|/[/*])|\);'' ' . expand('%')
                 \ . ' | grep -A 1 '':[^)]'''
+    " TODO check if file name is valid
     call job_start(['sh', '-c', cmd], {'close_cb': function('s:get_instances_map_cb')})
 endfunc
 

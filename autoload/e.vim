@@ -63,6 +63,10 @@ func! s:read_sn_logfile()
 		let errl = s:get_text('@\w\|\.e', 1)
 		let m = matchlist(errl, '\v\sat line (\d+) in (\@)?(\f+)')
 		if m != []
+                    if msg =~ 'Dut error'
+                        let s:lnum += 1
+                        let msg = s:get_text('^----*$', 0)
+                    endif
 		    let fn = (m[2] == '' ? s:get_file_long(g:projective_make_dir, m[3]) : e_modules[m[3]])
 		    call add(my_qf, {'filename': fn, 'lnum': m[1], 'text': msg, 'type': 'E'})
 		endif
@@ -70,7 +74,7 @@ func! s:read_sn_logfile()
 	endif
 	let s:lnum += 1
     endwhile
-    if empty(my_qf)
+    if empty(my_qf) || empty(Projective_get_files())
         call Projective_set_files(files)
     endif
     unlet s:lines
