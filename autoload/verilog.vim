@@ -23,7 +23,7 @@ func! s:syntax_check()
     endif
     let s:saved_make_opts = [g:projective_make_dir, g:projective_make_cmd, g:projective_make_console]
     let g:projective_make_dir = s:syntax_check_dir
-    let g:projective_make_cmd = 'ncvlog -sv -f ncvlog.args defines.v ' . expand('%:p')
+    let g:projective_make_cmd = 'ncvlog ' . g:projective_verilog_syntax_check_flags . ' -f ncvlog.args defines.v ' . expand('%:p')
     let g:projective_make_console = 0
     let s:syntax_check = 1
     call Projective_make(0)
@@ -184,6 +184,9 @@ func! verilog#Projective_init()
     endif
 
     let flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
+    if !exists('g:projective_verilog_syntax_check_flags')
+        let g:projective_verilog_syntax_check_flags = '-sv'
+    endif
     let g:simvision_cmd = 'cd ' . g:projective_make_dir . ';' .
                         \ ' simvision ' . flag_64 . '-nosplash -snapshot ' . g:projective_verilog_design_top .
                         \ ' -memberplugindir ' . s:cdn_dir . '/scope_tree_plugin'
@@ -231,6 +234,7 @@ func! verilog#Projective_cleanup()
     unlet s:modules
     unlet s:files
     unlet! g:projective_verilog_64_bit
+    unlet! g:projective_verilog_syntax_check_flags
     unlet! g:projective_verilog_grid
     if !empty(timer_info(s:dtimer_id))
         call timer_stop(s:dtimer_id)
@@ -285,6 +289,10 @@ func! s:generate_tree()
     call s:console_msg('Getting Design hierarchy from SimVision. Please wait...')
     let s:check_modified = 1
     let s:tree_ftime = getftime(s:tree_file)
+    if !exists('g:projective_verilog_grid')
+        " TODO for now, open and close simvision each time
+        let g:projective_verilog_grid = ''
+    endif
     if exists('g:projective_verilog_grid')
         call s:console_msg('')
         call s:console_msg('Starting remote SimVision')
