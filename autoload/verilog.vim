@@ -203,8 +203,10 @@ func! verilog#Projective_init()
 
     map <silent> <leader>va :call <SID>scope_up()<CR>
     map <silent> <leader>vv :call <SID>scope_down()<CR>
-    map <silent> <leader>vs :call <SID>send_to_schematic()<CR>
-    map <silent> <leader>vf :call <SID>get_schematic()<CR>
+    map <silent> <leader>vs :call <SID>send_simvision('schematic', 'n')<CR>
+    nmap <silent> <leader>vw :call <SID>send_simvision('waveform', 'n')<CR>
+    vmap <silent> <leader>vw :<C-U>call <SID>send_simvision('waveform', 'v')<CR>
+    map <silent> <leader>vg :call <SID>get_simvision()<CR>
     map <silent> <leader>vi :call <SID>find_instance()<CR>
 
     let s:syntax_check = 0
@@ -243,7 +245,9 @@ func! verilog#Projective_cleanup()
     unmap <leader>va
     unmap <leader>vv
     unmap <leader>vs
-    unmap <leader>vf
+    unmap <leader>vw
+    vunmap <leader>vw
+    unmap <leader>vg
     unmap <leader>vi
 "    echo g:projective_project_type . ' cleanup done!'
 endfunc
@@ -720,43 +724,111 @@ endfunc
 """"""""""""""""""""""""""""""""""""""""""""""""
 " Simvision
 """"""""""""""""""""""""""""""""""""""""""""""""
+"let g:sv_log = []
 
 func! s:simvision_eval(cmd)
+    "call add(g:sv_log, '> ' . a:cmd)
     call s:simvision_connect()
     while !exists('g:simvision_ch') || ch_status(g:simvision_ch) != 'open'
         sleep 100m
     endwhile
-    return ch_evalraw(g:simvision_ch, "request {" . a:cmd . "}\n")
+    let res = ch_evalraw(g:simvision_ch, "request {" . a:cmd . "}\n")
+    "call add(g:sv_log, res)
+    return res
 endfunc
 
-func! s:get_word_under_cursor()
-    return matchstr(getline('.'), '\w*\%' . col('.') . 'c\w*')
-endfunc
-
-func! s:send_to_schematic()
+func! s:select_cur_design_obj(mode)
     if !s:check_design(1)
+        return ''
+    endif
+    if a:mode == 'v'
+        let ids = []
+        for line in getline("'<", "'>")
+            let l = substitute(line, '//.*', '', '')
+            for w in split(l, '\W\+')
+                if w =~ '\a\w*'
+                    call add(ids, w)
+                endif
+            endfor
+        endfor
+    else
+        let ids = [matchstr(getline('.'), '\w*\%' . col('.') . 'c\w*')]
+    endif
+    let selection = ''
+    for id in ids
+        let obj = join(Projective_get_path(s:scope), '.') . '.' . id
+        let sel = s:simvision_eval('select set ' . obj . '; select get')
+        let sel = substitute(sel, '[{}]\|\[.*', '', 'g')
+        if sel == obj
+            if selection != ''
+                let selection .= ' '
+            endif
+            let selection .= obj
+        endif
+    endfor
+    if a:mode == 'v'
+        let sel = s:simvision_eval('select set ' . selection)
+    endif
+    return selection
+    " TODO handle multiple databases --
+    "let scope = s:simvision_eval('waveform sidebar access designbrowser -using ' . window . ' scope')
+    "let scope = substitute(scope, '::\zs.*', '', '')
+    "let scope = substitute(scope, '[" ]', '\\\\\\&', 'g')
+endfunc
+
+func! s:get_target_window(type)
+    let out = s:simvision_eval('window find -type ' . a:type)
+    let windows = []
+    while out =~ '{'
+        call add(windows, matchstr(out, '{[^}]*}'))
+        let out = substitute(out, '{[^}]*}', '', '')
+    endwhile
+    call extend(windows, split(out))
+    if empty(windows)
+        let name = '{' . g:projective_project_name . ' ' . a:type . '}'
+        call s:simvision_eval(a:type . ' new -name ' . name)
+        let win = name
+    else
+        let win = windows[-1] " default
+        for w in windows
+            if s:simvision_eval('window target ' . w) == '1'
+                let win = w
+                break
+            endif
+        endfor
+    endif
+    call s:simvision_eval('window activate ' . win)
+    return win
+endfunc
+
+func! s:send_simvision(type, mode)
+    if s:select_cur_design_obj(a:mode) == ''
         return
     endif
-    let design_obj = join(Projective_get_path(s:scope), '.') . '.' . s:get_word_under_cursor()
-    let cmd = 'schematic add ' . design_obj . '; select set ' . design_obj
-    if s:simvision_eval(cmd) == 'Error: no schematic window name entered'
-        call s:simvision_eval('schematic new')
-        call s:simvision_eval(cmd)
-    endif
+    let window = s:get_target_window(a:type)
+    call s:simvision_eval(a:type . ' add -using ' . window . ' -selected')
 endfunc
 
-func! s:get_schematic()
+func! s:get_simvision()
     if !s:check_design(0)
         return
     endif
-    let cs = s:simvision_eval('schematic curselection')
-    let cs = substitute(cs, '^.*::', '', '')
+    let cs = s:simvision_eval('select get')
+    let cs = substitute(cs, '[{}]\|\[.*', '', 'g')
     let sp = split(cs, '\.')
     call s:enable_init_tick()
+    let scope = Get_node_by_path(sp)
+    if empty(scope)
         let scope = Get_node_by_path(sp[0:-2])
+        let signal = sp[-1]
+    else
+        let signal = ''
+    endif
     call s:disable_init_tick()
     call s:edit_scope(scope, 'e')
+    if signal != ''
         call search('\<' . matchstr(sp[-1], '\w\+') . '\>')
+    endif
     norm! zz
 endfunc
 
@@ -807,7 +879,7 @@ func! s:simvision_connect()
     call writefile(['startServer ' . simvision_port], file)
     let cmd = g:simvision_server_cmd . ' -input projective.tcl'
     call s:console_open()
-    call s:console_msg('Connecting to SimVision (port: ' . simvision_port . '). Please wait...')
+    call s:console_msg('Connecting to SimVision (localhost:' . simvision_port . '). Please wait...')
     call s:console_msg(cmd)
     call s:console_msg('')
     call s:console_send_job(cmd)
