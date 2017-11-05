@@ -246,7 +246,6 @@ func! verilog#Projective_cleanup()
     unmap <leader>vv
     unmap <leader>vs
     unmap <leader>vw
-    vunmap <leader>vw
     unmap <leader>vg
     unmap <leader>vi
 "    echo g:projective_project_type . ' cleanup done!'

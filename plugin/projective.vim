@@ -31,7 +31,8 @@ augroup END
 
 func! s:save_cursor_hl()
     " this is faster than setting 'gcr'
-    let g:hl_cursor_cmd = 'hi ' . substitute(execute('hi Cursor')[1:], '\s*xxx', '', '')
+    " TODO vim's bug - when the screes is small the output is 2 lines
+    let g:hl_cursor_cmd = 'hi ' . substitute(execute('hi Cursor')[1:], '\s*xxx\|\n', '', 'g')
 endfunc
 
 func! s:hide_cursor()
