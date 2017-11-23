@@ -20,6 +20,9 @@ endif
 if !exists('projective_dir')
     let projective_dir = '~/projective'
 endif
+if !exists('projective_fuzzy_match_no_path')
+    let projective_fuzzy_match_no_path = 0
+endif
 
 augroup projective_commands
     au!
@@ -112,9 +115,21 @@ func! s:fuzzy_cb(ch, msg)
     endif
 endfunc
 
+let s:special_ch = { "\<CR>": 1, "\<Esc>": 1, "\<C-s>": 1, "\<C-t>": 1, "\<C-j>": 1, "\<C-k>": 1, "\<BS>": 1, "\<Down>": 1, "\<Up>": 1}
+
+func! s:get_char()
+    while 1
+        let ch = getchar()
+        if type(ch) != v:t_string
+            let ch = nr2char(ch)
+        endif
+        if ch =~ '[a-zA-Z0-9_.-]' || has_key(s:special_ch, ch)
+            return ch
+        endif
+    endwhile
+endfunc
+
 func! s:fuzzy_file_finder()
-    " TODO add an option to display (and match?) full path
-    " TODO add history
     if !exists('s:files')
         return
     endif
@@ -128,22 +143,22 @@ func! s:fuzzy_file_finder()
     let filter_str = ''
     let files = Projective_path('files.p')
     setlocal modifiable
-    call s:display_files(1)
+    call s:display_files()
     echo 'find file> '
-    let job = job_start(s:fuzzy_perl . ' ' . files, {'out_cb': function('s:fuzzy_cb')})
+    let fuzzy_exe = s:fuzzy_perl . ' ' . files . (g:projective_fuzzy_match_no_path ? ' --no-path' : '')
+    let job = job_start(fuzzy_exe, {'out_cb': function('s:fuzzy_cb')})
     let channel = job_getchannel(job)
-    let ch = getchar()
-    let cch = nr2char(ch)
-    while cch != "\<CR>" && cch != "\<Esc>" && cch != "\<C-s>" && cch != "\<C-t>"
+    let ch = s:get_char()
+    while ch != "\<CR>" && ch != "\<Esc>" && ch != "\<C-s>" && ch != "\<C-t>"
         call s:hide_cursor()
-        if cch == "\<C-j>" || ch == "\<Down>"
+        if ch == "\<C-j>" || ch == "\<Down>"
             if line('.') < len(s:files_ids)
                 if line('.') == line('$')
-                    call setline(line('$') + 1, matchstr(s:files[s:files_ids[line('$')]], '[^/]*$'))
+                    call setline(line('$') + 1, s:files[s:files_ids[line('$')]])
                 endif
                 norm! j
             endif
-        elseif cch == "\<C-k>" || ch == "\<Up>"
+        elseif ch == "\<C-k>" || ch == "\<Up>"
             if line('.') > 1
                 norm! k
             endif
@@ -151,8 +166,8 @@ func! s:fuzzy_file_finder()
             let s:fuzzy_done = 0
             let s:files_ids = []
             if ch != "\<BS>"
-                let filter_str .= cch
-                call ch_sendraw(channel, cch . "\n")
+                let filter_str .= ch
+                call ch_sendraw(channel, ch . "\n")
             else
                 if filter_str != ''
                     let filter_str = filter_str[:-2]
@@ -162,20 +177,19 @@ func! s:fuzzy_file_finder()
             while !s:fuzzy_done
                 sleep 10m
             endwhile
-            call s:display_files(1)    
+            call s:display_files()    
             call clearmatches()
             let i = 0
-            let hl = '\v\c.*' . substitute(filter_str, '.', '&.{-}', 'g')
+            let hl = '\V\c\.\*' . substitute(filter_str, '.', '&\\.\\{-}', 'g')
             while i < len(filter_str)
-                call matchadd('Title', substitute(hl, '\%'. (7+i*5) . 'c.', '\\zs&\\ze', '')) 
+                call matchadd('Title', substitute(hl, '\%'. (9+i*7) . 'c.', '\\zs&\\ze', '')) 
                 let i += 1
             endwhile
         endif
         redr
         call s:show_cursor()
         echo 'find file> ' . filter_str
-	let ch = getchar()
-        let cch = nr2char(ch)
+        let ch = s:get_char()
     endwhile
     call job_stop(job)
     setlocal nomodifiable
@@ -183,27 +197,25 @@ func! s:fuzzy_file_finder()
     let id = line('.') - 1
     close
     call win_gotoid(winid)
-    if cch == "\<Esc>"
+    if ch == "\<Esc>"
         return
-    elseif cch == "\<CR>"
+    elseif ch == "\<CR>"
         let cmd = 'e'
-    elseif cch == "\<C-s>"
+    elseif ch == "\<C-s>"
         let cmd = 'sp'
-    elseif cch == "\<C-t>"
+    elseif ch == "\<C-t>"
         let cmd = 'tabe'
     endif
     exe cmd s:files[s:files_ids[id]]
+    norm `"
 endfunc
 
-func! s:display_files(avail_space)
-    let len = len(s:files_ids)
-    if a:avail_space
-	let len = min([len, winheight(0)])
-    endif
+func! s:display_files()
+    let len = min([len(s:files_ids), winheight(0)])
     let lines = []
     let i = 0
     while i < len
-	call add(lines, matchstr(s:files[s:files_ids[i]], '[^/]*$'))
+	call add(lines, s:files[s:files_ids[i]])
 	let i += 1
     endwhile
     call setline(1, lines)
