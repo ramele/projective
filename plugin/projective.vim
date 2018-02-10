@@ -429,13 +429,15 @@ func! Projective_open_tree_browser()
         return
     endif
     let s:tree_bnr = s:set_window('Tree', '', 0, g:projective_tree_sp_mod)
-    setlocal nowrap so=4
+    " TODO
+    "setlocal nowrap so=4
     setlocal conceallevel=3 concealcursor=nvic
 
     map <silent> <buffer> <CR>          : call <SID>toggle_node_under_cursor()<CR>
     map <silent> <buffer> <2-LeftMouse> : call <SID>toggle_node_under_cursor()<CR>
 
-    syn match tree_icon    "[▿▸⎘]"
+    " u25B6, u25FF
+    syn match tree_icon    "[▶◿⎘]"
     syn match tree_conceal "[|!:]"    conceal contained
     syn match tree_hl1     "![^!]\+!" contains=tree_conceal
     syn match tree_hl2     ":[^:]\+:" contains=tree_conceal
@@ -627,7 +629,7 @@ func! s:node_str(node, indent)
         let hlc = ''
         let attr = ''
     endif
-    let sign = a:node.leaf ? '⎘' : a:node.expanded ? '▿' : '▸'
+    let sign = a:node.leaf ? '⎘' : a:node.expanded ? '◿' : '▶'
     return printf('%s%s %s%s%s%s', a:indent, sign , hlc, a:node.name, hlc, attr)
 endfunc
 

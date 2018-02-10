@@ -3,15 +3,28 @@
 command! Simvision    :call s:simvision_connect()
 command! UpdateDesign :call s:generate_tree()
 
+if !exists('projective_verilog_smart_search')
+    let projective_verilog_smart_search = 1
+endif
+
+if !exists('projective_verilog_tool')
+    " use 'xm' for Xcelium
+    let projective_verilog_tool = 'nc'
+endif
+
 if !exists('projective_verilog_file_extentions')
     let projective_verilog_file_extentions = '*.v,*.vp,*.vs,*.sv,*.svp,*.svi,*.svh'
 endif
+
+func! s:tool_str(str)
+    return substitute(a:str, '%', g:projective_verilog_tool, 'g')
+endfunc
 
 func! s:set_make(clean)
     if a:clean
         let s:files = []
         let s:modules = {}
-        call Projective_save_file([], 'ncvlog/ncvlog.args')
+        call Projective_save_file([], s:tool_str('%vlog/%vlog.args'))
     endif
 endfunc
 
@@ -23,7 +36,7 @@ func! s:syntax_check()
     endif
     let s:saved_make_opts = [g:projective_make_dir, g:projective_make_cmd, g:projective_make_console]
     let g:projective_make_dir = s:syntax_check_dir
-    let g:projective_make_cmd = 'ncvlog ' . g:projective_verilog_syntax_check_flags . ' -f ncvlog.args defines.v ' . expand('%:p')
+    let g:projective_make_cmd = s:tool_str('%vlog ' . g:projective_verilog_syntax_check_flags . ' -f %vlog.args defines.v ' . expand('%:p'))
     let g:projective_make_console = 0
     let s:syntax_check = 1
     call Projective_make(0)
@@ -31,7 +44,7 @@ endfunc
 
 func! s:make_post()
     if s:syntax_check
-	let lines = readfile(s:syntax_check_dir . '/ncvlog.log')
+	let lines = readfile(s:tool_str(s:syntax_check_dir . '/%vlog.log'))
     else
         let log = expand(g:projective_make_dir . '/' . g:projective_verilog_log_file)
 	let lines = Projective_system('grep "\*[EF]," ' . log)
@@ -61,7 +74,7 @@ func! s:make_post()
         call job_start(['/bin/sh', '-c',
                     \ 'grep "^file:\|^\s*module\>" ' . log . ' | sed "s/^file: /-/; s/^\s*module \w*\.\(\w*\):.*/\1/"'],
                     \ {'close_cb': function('s:update_db')})
-        let args = s:syntax_check_dir . '/ncvlog.args'
+        let args = s:tool_str(s:syntax_check_dir . '/%vlog.args')
         " TODO handle include path/file
         call job_start(['/bin/sh', '-c',
                     \ 'touch ' . args . '; ' .
@@ -103,7 +116,7 @@ func! s:update_db(channel)
     call Projective_set_files(s:files)
     call Projective_save_file([string(s:modules)], 'modules.p')
 "    echo 'Updating `defines...'
-    let cmd = "grep -h '^\\s*`define' " . join(s:files)
+    let cmd = "grep -n '^\\s*`define' " . join(s:files) . ' | ' . s:get_defines_pl
     let cmdf = s:set_cmd_file([cmd], 'get_defines.sh')
     call job_start(['/bin/sh', '-c', cmdf], {
                 \ 'out_io': 'file',
@@ -158,7 +171,7 @@ func! verilog#Projective_init()
         let s:modules = eval(m[0])
     endif
 
-    let s:syntax_check_dir = Projective_path('ncvlog')
+    let s:syntax_check_dir = Projective_path(s:tool_str('%vlog'))
     if !isdirectory(s:syntax_check_dir)
         call mkdir(s:syntax_check_dir)
     endif
@@ -181,6 +194,7 @@ func! verilog#Projective_init()
         let s:cdn_dir = globpath(&rtp, 'languages/verilog-IES')
         let s:get_scope_pl = s:cdn_dir . '/get_scope.pl'
         let s:search_inst_pl = s:cdn_dir . '/search_inst.pl'
+        let s:get_defines_pl = s:cdn_dir . '/get_defines.pl'
     endif
 
     let flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
@@ -302,6 +316,7 @@ func! s:generate_tree()
         let cmdf = s:set_cmd_file([g:simvision_cmd . ' -input projective.tcl'], 'simvision_get_tree.sh')
         let file = expand(g:projective_make_dir . '/projective.tcl')
         call writefile(['print_scope_tree -include cells', 'exit'], file)
+        "call writefile(['print_scope_tree', 'exit'], file)
         call s:console_send_job(g:projective_verilog_grid . ' ' . cmdf)
     else
         call s:simvision_eval('print_scope_tree -include cells')
@@ -552,6 +567,7 @@ endfunc
 
 func! s:get_instances_map()
     " is not compatible with old grep (<= 2.5.1)
+    let s:instances_map_valid = 0
     let s:instances = {}
     if empty(s:scope)
         return
@@ -583,6 +599,7 @@ func! s:get_instances_map_cb(channel)
 	    let inst_lnum = 0
 	endif
     endwhile
+    let s:instances_map_valid = 1
 endfunc
 
 func! s:check_design(verify_scope)
@@ -596,15 +613,46 @@ func! s:check_design(verify_scope)
     return 0
 endfunc
 
+func! s:cursor_on_searched_signal()
+    return getline('.')[col('.')-2] !~ '\w' && getline('.')[(col('.')-1):] =~ '^' . @/
+endfunc
+
 func! s:scope_up()
     if !s:check_design(1)
         return
     endif
+    let inst_name = s:scope.name
     let node = Projective_get_parent(s:scope)
     if empty(node)
         echohl WarningMsg | echo  'Already at the top hierarchy' | echohl None
     else
+        if g:projective_verilog_smart_search && s:cursor_on_searched_signal()
+            let auto_search = 1
+        endif
         call s:edit_scope(node, 'e')
+        let timeout = 1000
+        while timeout
+            if s:instances_map_valid
+                for i in range(1, line('$'))
+                    if get(s:instances, i, '') == inst_name
+                        let inst_lnr = i
+                        break
+                    endif
+                endfor
+                call cursor(inst_lnr, 1)
+                if auto_search
+                    let signal_lnr = search('\.' . @/, 'n')
+                    if get(s:instances, signal_lnr, '') == inst_name
+                        call search('\.' . @/ . '[^(]*(\s*\zs\w')
+                        let @/ = '\<' . matchstr(getline('.')[(col('.')-1):], '\w\+') . '\>'
+                        call histadd('/', @/)
+                    endif
+                endif
+                break
+            endif
+            sleep 20m
+            let timeout -= 20
+        endwhile
     endif
 endfunc
 
@@ -616,8 +664,22 @@ func! s:scope_down()
     if inst == ''
         echohl WarningMsg | echo 'Not a module instance' | echohl None
     else
+        let auto_search = 0
+        if g:projective_verilog_smart_search && s:cursor_on_searched_signal()
+            if getline('.')[col('.')-2] == '('
+                let signal = matchstr(getline('.')[:(col('.')-2)], '.*\.\zs\w\+')
+                let auto_search = 1
+            elseif getline('.')[col('.')-2] == '.'
+                let signal = matchstr(getline('.'), '\%' . col('.') . 'c\w*')
+                let auto_search = 1
+            endif
+        endif
         let node = Get_node_by_path([inst], s:scope)
         call s:edit_scope(node, 'e')
+        if auto_search
+            call cursor(1,1)
+            call feedkeys('/\<' . signal . '\>' . "\<CR>", 'n')
+        endif
     endif
 endfunc
 
@@ -665,7 +727,8 @@ func! s:signal_direction_cb(channel)
     if dir != s:prev_dir
         let s:prev_dir = dir
         if !empty(s:hl_scope) && Projective_get_node_hl(s:hl_scope) =~ '3'
-            call Projective_set_node_hl(s:hl_scope, '3  ' . (dir == 'input' ? '◀' : dir == 'output' ? '▶' : dir == 'inout' ? '◀▶' : ''))
+            "u25C4, u25BA
+            call Projective_set_node_hl(s:hl_scope, '3  ' . (dir == 'input' ? '◄' : dir == 'output' ? '►' : dir == 'inout' ? '◄►' : ''))
             call Projective_tree_refresh(0)
         endif
     endif
