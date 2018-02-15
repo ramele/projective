@@ -626,6 +626,7 @@ func! s:scope_up()
     if empty(node)
         echohl WarningMsg | echo  'Already at the top hierarchy' | echohl None
     else
+        let auto_search = 0
         if g:projective_verilog_smart_search && s:cursor_on_searched_signal()
             let auto_search = 1
         endif
