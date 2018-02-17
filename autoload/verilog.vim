@@ -1,6 +1,6 @@
 " Projective Verilog extension
 
-command! Simvision    :call s:simvision_connect()
+command! -nargs=? -complete=dir Simvision :call s:simvision_connect(<q-args>)
 command! UpdateDesign :call s:generate_tree()
 
 if !exists('projective_verilog_smart_search')
@@ -197,14 +197,15 @@ func! verilog#Projective_init()
         let s:get_defines_pl = s:cdn_dir . '/get_defines.pl'
     endif
 
-    let flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
+    let s:flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
     if !exists('g:projective_verilog_syntax_check_flags')
         let g:projective_verilog_syntax_check_flags = '-sv'
     endif
-    let g:simvision_cmd = 'cd ' . g:projective_make_dir . ';' .
-                        \ ' simvision ' . flag_64 . '-nosplash -snapshot ' . g:projective_verilog_design_top .
+    let s:simvision_tree_cmd = 'cd ' . g:projective_make_dir . ';' .
+                        \ ' simvision ' . s:flag_64 . '-nosplash -snapshot ' . g:projective_verilog_design_top .
                         \ ' -memberplugindir ' . s:cdn_dir . '/scope_tree_plugin'
-    let g:simvision_server_cmd = g:simvision_cmd . ' -input ' . s:cdn_dir . '/server.tcl'
+
+    let s:sv_cursor_active = 0
 
     augroup projective_verilog_commands
 	au!
@@ -215,11 +216,14 @@ func! verilog#Projective_init()
         exe 'au InsertEnter,BufLeave' g:projective_verilog_file_extentions 'call s:disable_hl_timer()'
     augroup END
 
-    map <silent> <leader>va :call <SID>scope_up()<CR>
+    map <silent> <leader>va :call <SID>scope_up()<CR> " old default
+    map <silent> <leader>vf :call <SID>scope_up()<CR>
     map <silent> <leader>vv :call <SID>scope_down()<CR>
-    map <silent> <leader>vs :call <SID>send_simvision('schematic', 'n')<CR>
+    nmap <silent> <leader>vs :call <SID>send_simvision('schematic', 'n')<CR>
+    vmap <silent> <leader>vs :<C-U>call <SID>send_simvision('schematic', 'v')<CR>
     nmap <silent> <leader>vw :call <SID>send_simvision('waveform', 'n')<CR>
     vmap <silent> <leader>vw :<C-U>call <SID>send_simvision('waveform', 'v')<CR>
+    map <silent> <leader>vc :call <SID>toggle_sv_cursor_bind()<CR>
     map <silent> <leader>vg :call <SID>get_simvision()<CR>
     map <silent> <leader>vi :call <SID>find_instance()<CR>
 
@@ -257,9 +261,11 @@ func! verilog#Projective_cleanup()
     endif
 
     unmap <leader>va
+    unmap <leader>vf
     unmap <leader>vv
     unmap <leader>vs
     unmap <leader>vw
+    unmap <leader>vc
     unmap <leader>vg
     unmap <leader>vi
 "    echo g:projective_project_type . ' cleanup done!'
@@ -312,8 +318,8 @@ func! s:generate_tree()
     endif
     if exists('g:projective_verilog_grid')
         call s:console_msg('')
-        call s:console_msg('Starting remote SimVision')
-        let cmdf = s:set_cmd_file([g:simvision_cmd . ' -input projective.tcl'], 'simvision_get_tree.sh')
+        call s:console_msg('Starting SimVision...')
+        let cmdf = s:set_cmd_file([s:simvision_tree_cmd . ' -input projective.tcl'], 'simvision_get_tree.sh')
         let file = expand(g:projective_make_dir . '/projective.tcl')
         call writefile(['print_scope_tree -include cells', 'exit'], file)
         "call writefile(['print_scope_tree', 'exit'], file)
@@ -791,7 +797,7 @@ endfunc
 
 func! s:simvision_eval(cmd)
     "call add(g:sv_log, '> ' . a:cmd)
-    call s:simvision_connect()
+    call s:simvision_connect('')
     while !exists('g:simvision_ch') || ch_status(g:simvision_ch) != 'open'
         sleep 100m
     endwhile
@@ -809,7 +815,7 @@ func! s:select_cur_design_obj(mode)
         for line in getline("'<", "'>")
             let l = substitute(line, '//.*', '', '')
             for w in split(l, '\W\+')
-                if w =~ '\a\w*'
+                if w =~ '\a\w*' && w !~ '\v<(wire|reg|input|output|inout|assign)>'
                     call add(ids, w)
                 endif
             endfor
@@ -848,9 +854,8 @@ func! s:get_target_window(type)
     endwhile
     call extend(windows, split(out))
     if empty(windows)
-        let name = '{' . g:projective_project_name . ' ' . a:type . '}'
-        call s:simvision_eval(a:type . ' new -name ' . name)
-        let win = name
+        let win = a:type
+        call s:simvision_eval(a:type . ' new -name ' . win)
     else
         let win = windows[-1] " default
         for w in windows
@@ -870,6 +875,34 @@ func! s:send_simvision(type, mode)
     endif
     let window = s:get_target_window(a:type)
     call s:simvision_eval(a:type . ' add -using ' . window . ' -selected')
+endfunc
+
+func! s:toggle_sv_cursor_bind()
+    let s:sv_cursor_active = !s:sv_cursor_active
+    if s:sv_cursor_active
+        let s:cursor_ln = 0
+        call s:set_cursor()
+        augroup sv_cursor_command
+            au!
+            au CursorMoved <buffer> call s:set_cursor()
+        augroup END
+        echo 'Simvision cursor sync is ON'
+    else
+        au! sv_cursor_command
+        echo 'Simvision cursor sync is OFF'
+    endif
+endfunc
+
+func! s:set_cursor()
+    if line('.') == s:cursor_ln
+        return
+    endif
+    let s:cursor_ln = line('.')
+    let time = matchstr(getline('.'), '\v<\d+%(\.\d+)?>%(\s*<%(s|ms|us|ns|ps|fs)>)?')
+    let time = substitute(time, '\s\+', '', '')
+    if time != ''
+        call s:simvision_eval('cursor set -using TimeA -time ' . time)
+    endif
 endfunc
 
 func! s:get_simvision()
@@ -916,7 +949,7 @@ if !exists('simvision_chs')
     let simvision_chs = {}
 endif
 
-func! s:simvision_connect()
+func! s:simvision_connect(db)
     " TODO move to check_sv_connection()
     " TODO handle error
     let s:sv_close_console = !s:console_open
@@ -934,13 +967,20 @@ func! s:simvision_connect()
         endif
     endif
 
-    let file = expand(g:projective_make_dir . '/projective.tcl')
+    let file = Projective_path('projective.tcl')
     let simvision_port = s:find_free_port()
     if simvision_port == 0
         return
     endif
     call writefile(['startServer ' . simvision_port], file)
-    let cmd = g:simvision_server_cmd . ' -input projective.tcl'
+
+    let cmd = (a:db == '' ? 'cd ' . g:projective_make_dir . ';' : '') .
+                \ ' simvision ' . s:flag_64 . '-nosplash' .
+                \ ' -input ' . s:cdn_dir . '/server.tcl' .
+                \ ' -input ' . file .
+                \ ' -title ' . g:projective_project_name . '@' . v:servername .
+                \ (a:db == '' ? ' -snapshot ' . g:projective_verilog_design_top : ' ' . a:db)
+
     call s:console_open()
     call s:console_msg('Connecting to SimVision (localhost:' . simvision_port . '). Please wait...')
     call s:console_msg(cmd)
