@@ -1,0 +1,15 @@
+" projective init file for e
+""""""""""""""""""""""""""""
+let projective_project_type = 'e'
+
+" Where to run :Make (will be created automatically if not exists):
+let projective_make_dir = '$TOP/run'
+
+" Specify the command to run with :Make (you can use irun/xrun or a proprietary script):
+let ojective_make_cmd = 'specman -c "load $TOP/my_e_top; start; exit"'
+
+" Define how to run a clean build (when you call :Make! -with '!'):
+let projective_make_clean_cmd = 'rm -rf *; ' . projective_make_cmd
+
+" Name of the log-file that is created by :Make :
+let projective_e_log_file = 'specman.elog'
