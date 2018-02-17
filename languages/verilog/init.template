@@ -1,0 +1,36 @@
+" projective init file for verilog
+""""""""""""""""""""""""""""""""""
+let projective_project_type = 'verilog'
+
+" Where to run :Make (will be created automatically if not exists):
+let projective_make_dir = '$TOP/work'
+
+" Specify the command to run with :Make (you can use irun/xrun or a proprietary script):
+let projective_make_cmd = 'irun -sv -f irun.args -elaborate -parseinfo include'
+
+" Define how to run a clean build (when you call :Make! -with '!'):
+let projective_make_clean_cmd = projective_make_cmd . ' -clean'
+
+" Name of the log-file that is created by :Make :
+let projective_verilog_log_file = 'irun.log'
+
+" Top design module name:
+let projective_verilog_design_top = 'top'
+
+
+" Chnage the following defaults if you need:
+""""""""""""""""""""""""""""""""""""""""""""
+" Change this to 1 if you are using 64 bit compilation
+let projective_verilog_64_bit = 0
+
+" Change this if you want to use DRM for design-tree generation. E.g., 'nc run'
+let projective_verilog_drm_cmd = ''
+
+" Use 'xm' if you are running XCELIUM. Default is INCISIV.
+let projective_verilog_tool = 'nc'
+
+" Flags to ncvlog/xmvlog for the background compilation
+let projective_verilog_syntax_check_flags = '-sv'
+
+" Edit this if you have different verilog file extentions in your project
+let projective_verilog_file_extentions = '*.v,*.vp,*.vs,*.sv,*.svp,*.svi,*.svh'

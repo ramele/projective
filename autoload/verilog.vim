@@ -1,19 +1,11 @@
 " Projective Verilog extension
+" Author: Ramel Eshed
 
 command! -nargs=? -complete=dir Simvision :call s:simvision_connect(<q-args>)
 command! UpdateDesign :call s:generate_tree()
 
 if !exists('projective_verilog_smart_search')
     let projective_verilog_smart_search = 1
-endif
-
-if !exists('projective_verilog_tool')
-    " use 'xm' for Xcelium
-    let projective_verilog_tool = 'nc'
-endif
-
-if !exists('projective_verilog_file_extentions')
-    let projective_verilog_file_extentions = '*.v,*.vp,*.vs,*.sv,*.svp,*.svi,*.svh'
 endif
 
 func! s:tool_str(str)
@@ -171,6 +163,35 @@ func! verilog#Projective_init()
         let s:modules = eval(m[0])
     endif
 
+    if !exists('s:cdn_dir')
+        let s:cdn_dir = globpath(&rtp, 'languages/verilog')
+        let s:get_scope_pl = s:cdn_dir . '/get_scope.pl'
+        let s:search_inst_pl = s:cdn_dir . '/search_inst.pl'
+        let s:get_defines_pl = s:cdn_dir . '/get_defines.pl'
+    endif
+
+    let s:flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
+    if exists('g:projective_verilog_grid')
+        " TODO deprecated
+        let g:projective_verilog_drm_cmd = g:projective_verilog_grid
+    endif
+    if !exists('g:projective_verilog_drm_cmd')
+        let g:projective_verilog_drm_cmd = ''
+    endif
+    if g:projective_verilog_drm_cmd == ''
+        " use non-empty string for now to invoke simvision each time UpdateDesign is called
+        let g:projective_verilog_drm_cmd = ' '
+    endif
+    if !exists('g:projective_verilog_tool')
+        let g:projective_verilog_tool = 'nc'
+    endif
+    if !exists('g:projective_verilog_syntax_check_flags')
+        let g:projective_verilog_syntax_check_flags = '-sv'
+    endif
+    if !exists('projective_verilog_file_extentions')
+        let g:projective_verilog_file_extentions = '*.v,*.vp,*.vs,*.sv,*.svp,*.svi,*.svh'
+    endif
+
     let s:syntax_check_dir = Projective_path(s:tool_str('%vlog'))
     if !isdirectory(s:syntax_check_dir)
         call mkdir(s:syntax_check_dir)
@@ -189,18 +210,6 @@ func! verilog#Projective_init()
         endif
     endif
 
-    if !exists('s:cdn_dir')
-        " TODO how to manage lang directories?
-        let s:cdn_dir = globpath(&rtp, 'languages/verilog-IES')
-        let s:get_scope_pl = s:cdn_dir . '/get_scope.pl'
-        let s:search_inst_pl = s:cdn_dir . '/search_inst.pl'
-        let s:get_defines_pl = s:cdn_dir . '/get_defines.pl'
-    endif
-
-    let s:flag_64 = exists('g:projective_verilog_64_bit') && g:projective_verilog_64_bit ? '-64BIT ' : ''
-    if !exists('g:projective_verilog_syntax_check_flags')
-        let g:projective_verilog_syntax_check_flags = '-sv'
-    endif
     let s:simvision_tree_cmd = 'cd ' . g:projective_make_dir . ';' .
                         \ ' simvision ' . s:flag_64 . '-nosplash -snapshot ' . g:projective_verilog_design_top .
                         \ ' -memberplugindir ' . s:cdn_dir . '/scope_tree_plugin'
@@ -216,7 +225,7 @@ func! verilog#Projective_init()
         exe 'au InsertEnter,BufLeave' g:projective_verilog_file_extentions 'call s:disable_hl_timer()'
     augroup END
 
-    map <silent> <leader>va :call <SID>scope_up()<CR> " old default
+    map <silent> <leader>va :call <SID>scope_up()<CR> " TODO deprecated
     map <silent> <leader>vf :call <SID>scope_up()<CR>
     map <silent> <leader>vv :call <SID>scope_down()<CR>
     nmap <silent> <leader>vs :call <SID>send_simvision('schematic', 'n')<CR>
@@ -253,9 +262,13 @@ func! verilog#Projective_cleanup()
     endif
     unlet s:modules
     unlet s:files
+    " new flags
     unlet! g:projective_verilog_64_bit
     unlet! g:projective_verilog_syntax_check_flags
     unlet! g:projective_verilog_grid
+    unlet! g:projective_verilog_drm_cmd
+    unlet! g:projective_verilog_tool
+    unlet! g:projective_verilog_file_extentions
     if !empty(timer_info(s:dtimer_id))
         call timer_stop(s:dtimer_id)
     endif
@@ -275,7 +288,7 @@ endfunc
 " hierarchy
 """"""""""""""""""""""""""""""""""""""""""""""""
 " TODO TEMP. waiting for setbufline() in vimL...
-"
+
 func! s:console_open()
     if s:console_open
         return
@@ -312,18 +325,14 @@ func! s:generate_tree()
     call s:console_msg('Getting Design hierarchy from SimVision. Please wait...')
     let s:check_modified = 1
     let s:tree_ftime = getftime(s:tree_file)
-    if !exists('g:projective_verilog_grid')
-        " TODO for now, open and close simvision each time
-        let g:projective_verilog_grid = ''
-    endif
-    if exists('g:projective_verilog_grid')
+    if g:projective_verilog_drm_cmd != ''
         call s:console_msg('')
         call s:console_msg('Starting SimVision...')
         let cmdf = s:set_cmd_file([s:simvision_tree_cmd . ' -input projective.tcl'], 'simvision_get_tree.sh')
         let file = expand(g:projective_make_dir . '/projective.tcl')
         call writefile(['print_scope_tree -include cells', 'exit'], file)
         "call writefile(['print_scope_tree', 'exit'], file)
-        call s:console_send_job(g:projective_verilog_grid . ' ' . cmdf)
+        call s:console_send_job(g:projective_verilog_drm_cmd . ' ' . cmdf)
     else
         call s:simvision_eval('print_scope_tree -include cells')
     endif

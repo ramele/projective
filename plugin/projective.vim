@@ -1,27 +1,24 @@
-" TODO use Agrep like alt-window switch
-" TODO cache projects
-" TODO check files timestamp
-"
-if !exists('projective_make_console')
-    let projective_make_console = 1
-endif
-if !exists('projective_console_sp_mod')
-    let projective_console_sp_mod = 'bo 15'
-endif
-if !exists('projective_fbrowser_sp_mod')
-    let projective_fbrowser_sp_mod = 'bo 10'
-endif
-if !exists('projective_tree_sp_mod')
-    let projective_tree_sp_mod = 'vert to 45'
-endif
-if !exists('projective_switcher_sp_mode')
-    let projective_switcher_sp_mode = 'bo 8'
-endif
+" Projective plugin for Vim
+" Author: Ramel Eshed
+
 if !exists('projective_dir')
     let projective_dir = '~/projective'
 endif
+if !exists('projective_make_console')
+    let projective_make_console = 1
+endif
 if !exists('projective_fuzzy_match_no_path')
     let projective_fuzzy_match_no_path = 0
+endif
+" default :new modifiers
+if !exists('projective_console_sp_mod')
+    let projective_console_sp_mod = 'bo 15'
+endif
+if !exists('projective_fuzzy_sp_mod')
+    let projective_fuzzy_sp_mod = 'bo 10'
+endif
+if !exists('projective_tree_sp_mod')
+    let projective_tree_sp_mod = 'vert to 45'
 endif
 
 augroup projective_commands
@@ -103,58 +100,58 @@ func! s:make_cb(channel)
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
-" fuzzy file finder
+" fuzzy finder
 """"""""""""""""""""""""""""""""""""""""""""""""
-map <silent> <leader>/ :call <SID>fuzzy_file_finder()<CR>
-
 func! s:fuzzy_cb(ch, msg)
     if a:msg == '--'
         let s:fuzzy_done = 1
     else
-        call add(s:files_ids, a:msg)
+        call add(s:fuzzy_matches, a:msg)
     endif
 endfunc
 
-let s:special_ch = { "\<CR>": 1, "\<Esc>": 1, "\<C-s>": 1, "\<C-t>": 1, "\<C-j>": 1, "\<C-k>": 1, "\<BS>": 1, "\<Down>": 1, "\<Up>": 1}
+let s:special_ch = { "\<Esc>": 1, "\<C-j>": 1, "\<C-k>": 1, "\<BS>": 1, "\<Down>": 1, "\<Up>": 1}
 
-func! s:get_char()
+func! s:get_char(ops)
     while 1
         let ch = getchar()
         if type(ch) != v:t_string
             let ch = nr2char(ch)
         endif
-        if ch =~ '[a-zA-Z0-9_.-]' || has_key(s:special_ch, ch)
+        if ch =~ '[a-zA-Z0-9_.-]' || has_key(s:special_ch, ch) || has_key(a:ops, ch)
             return ch
         endif
     endwhile
 endfunc
 
-func! s:fuzzy_file_finder()
-    if !exists('s:files')
-        return
-    endif
+func! s:fuzzy_find(name, list, file, ops)
     if !exists('s:fuzzy_perl')
         let s:fuzzy_perl = globpath(&rtp, 'perl/fuzzyfind.pl')
     endif
     let winid = win_getid()
-    call s:set_window('Files-browser', '', 0, g:projective_fbrowser_sp_mod)
+    call s:set_window(a:name, '', 0, g:projective_fuzzy_sp_mod)
     setlocal cursorline
-    let s:files_ids = range(0, len(s:files)-1)
+    let s:fuzzy_matches = range(0, len(a:list)-1)
     let filter_str = ''
-    let files = Projective_path('files.p')
+    if a:file != ''
+        let listf = a:file
+    else
+        let listf = g:projective_dir . '/fuzzy.p'
+        call writefile(a:list, listf)
+    endif
     setlocal modifiable
-    call s:display_files()
-    echo 'find file> '
-    let fuzzy_exe = s:fuzzy_perl . ' ' . files . (g:projective_fuzzy_match_no_path ? ' --no-path' : '')
+    call s:display_matches(a:list)
+    echo 'find> '
+    let fuzzy_exe = s:fuzzy_perl . ' ' . listf . (g:projective_fuzzy_match_no_path ? ' --no-path' : '')
     let job = job_start(fuzzy_exe, {'out_cb': function('s:fuzzy_cb')})
     let channel = job_getchannel(job)
-    let ch = s:get_char()
-    while ch != "\<CR>" && ch != "\<Esc>" && ch != "\<C-s>" && ch != "\<C-t>"
+    let ch = s:get_char(a:ops)
+    while ch != "\<Esc>" && !has_key(a:ops, ch)
         call s:hide_cursor()
         if ch == "\<C-j>" || ch == "\<Down>"
-            if line('.') < len(s:files_ids)
+            if line('.') < len(s:fuzzy_matches)
                 if line('.') == line('$')
-                    call setline(line('$') + 1, s:files[s:files_ids[line('$')]])
+                    call setline(line('$') + 1, a:list[s:fuzzy_matches[line('$')]])
                 endif
                 norm! j
             endif
@@ -164,7 +161,7 @@ func! s:fuzzy_file_finder()
             endif
 	else
             let s:fuzzy_done = 0
-            let s:files_ids = []
+            let s:fuzzy_matches = []
             if ch != "\<BS>"
                 let filter_str .= ch
                 call ch_sendraw(channel, ch . "\n")
@@ -177,7 +174,7 @@ func! s:fuzzy_file_finder()
             while !s:fuzzy_done
                 sleep 10m
             endwhile
-            call s:display_files()    
+            call s:display_matches(a:list)    
             call clearmatches()
             let i = 0
             let hl = '\V\c\.\*' . substitute(filter_str, '.', '&\\.\\{-}', 'g')
@@ -188,40 +185,54 @@ func! s:fuzzy_file_finder()
         endif
         redr
         call s:show_cursor()
-        echo 'find file> ' . filter_str
-        let ch = s:get_char()
+        echo 'find> ' . filter_str
+        let ch = s:get_char(a:ops)
     endwhile
     call job_stop(job)
     setlocal nomodifiable
     call clearmatches()
     let id = line('.') - 1
-    close
+    bw
     call win_gotoid(winid)
-    if ch == "\<Esc>"
+    redr!
+    if ch == "\<Esc>" || empty(s:fuzzy_matches)
         return
-    elseif ch == "\<CR>"
-        let cmd = 'e'
-    elseif ch == "\<C-s>"
-        let cmd = 'sp'
-    elseif ch == "\<C-t>"
-        let cmd = 'tabe'
+    else
+        let Func = a:ops[ch]
+        call Func(a:list[s:fuzzy_matches[id]])
     endif
-    exe cmd s:files[s:files_ids[id]]
-    norm `"
 endfunc
 
-func! s:display_files()
-    let len = min([len(s:files_ids), winheight(0)])
+func! s:display_matches(list)
+    let len = min([len(s:fuzzy_matches), winheight(0)])
     let lines = []
     let i = 0
     while i < len
-	call add(lines, s:files[s:files_ids[i]])
+	call add(lines, a:list[s:fuzzy_matches[i]])
 	let i += 1
     endwhile
     call setline(1, lines)
     exe 'silent!' i+1 . ',$d _'
     call cursor(1,1)
     redr
+endfunc
+
+" fuzzy file finder
+map <silent> <leader>/ :call <SID>fuzzy_file_finder()<CR>
+
+func! s:fuzzy_file_finder()
+    if !exists('s:files')
+        return
+    endif
+    let ops = { "\<CR>": function('s:fuzzy_edit', ['e']),
+                \ "\<C-s>": function('s:fuzzy_edit', ['sp']),
+                \ "\<C-t>": function('s:fuzzy_edit', ['tabe'])}
+    call s:fuzzy_find('Project-files', s:files, Projective_path('files.p'), ops)
+endfunc
+
+func! s:fuzzy_edit(cmd, file)
+    exe a:cmd a:file
+    norm `"
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
@@ -292,28 +303,52 @@ func! Projective_ch_send(msg)
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
-" Project select
+" Projective menu
 """"""""""""""""""""""""""""""""""""""""""""""""
-map <silent> <leader>s :call <SID>project_select()<CR>
+map <silent> <leader>s :call <SID>menu()<CR>
 command! -nargs=? Projective :call s:project_init(<q-args>)
 
 let g:projective_project_name = ''
 
-func! s:project_select()
-    call s:set_window('Switch-project', '', 0, g:projective_switcher_sp_mode)
-    setlocal nowrap
-    setlocal cursorline
-
-    map <silent> <buffer> <CR> :call <SID>project_init(getline('.')) \| bw!<CR>
-    map <silent> <buffer> e    :call <SID>edit_project()<CR>
-    
-"    let rt = reltime()
+func! s:menu()
     let gl = glob(g:projective_dir . '/*/init.vim', 1, 1)
-"    echo 'time: ' . reltimestr((reltime(rt)))
     let projects = map(gl, {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
-    setlocal modifiable
-    call setline(1, projects)
-    setlocal nomodifiable
+    let ops = { "\<CR>": function('s:project_init'),
+                \ "\<C-e>": function('s:edit_project'),
+                \ "\<C-n>": function('s:new_project')}
+    call s:fuzzy_find('Projective-menu', projects, '', ops)
+endfunc
+
+func! s:edit_project(name)
+    let saved_p = g:projective_project_name
+    let g:projective_project_name = a:name
+    exe 'tabe' Projective_path('init.vim')
+    let g:projective_project_name = saved_p
+    augroup project_init_command
+        au!
+        exe 'au BufWritePost <buffer> call s:project_init("' . a:name . '")'
+    augroup END
+endfunc
+
+func! s:new_project(...)
+    if !exists('s:plugin_dir')
+        let s:plugin_dir = globpath(&rtp, 'projective')
+    endif
+    let lang_path = glob(s:plugin_dir . '/languages/*', 1, 1)
+    let lang = map(lang_path, {k, v -> substitute(v, '.*/', '', '')})
+    let ops = {"\<CR>": function('s:create_proj')}
+    call s:fuzzy_find('Select-language', lang, '', ops)
+endfunc
+
+func! s:create_proj(lang)
+    let name = input("Enter project name: ")
+    if name == ''
+        return
+    endif
+    let proj_dir = g:projective_dir . '/' . name
+    call system('mkdir ' . proj_dir)
+    call system('cp ' . s:plugin_dir . '/languages/' . a:lang . '/init.template ' . proj_dir . '/init.vim')
+    call s:edit_project(name)
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
@@ -350,14 +385,6 @@ func! s:project_init(name)
     let g:projective_make_dir = expand(g:projective_make_dir)
 
     exe 'call' g:projective_project_type . '#Projective_init()'
-endfunc
-
-func! s:edit_project()
-    let saved_p = g:projective_project_name
-    let g:projective_project_name = getline('.')
-    bw!
-    exe 'tabe' Projective_path('init.vim')
-    let g:projective_project_name = saved_p
 endfunc
 
 func! s:set_window(bufname, title, return, sp_mod, ...)
