@@ -38,7 +38,7 @@ func! s:make_post()
     if s:syntax_check
 	let lines = readfile(s:tool_str(s:syntax_check_dir . '/%vlog.log'))
     else
-        let log = expand(g:projective_make_dir . '/' . g:projective_verilog_log_file)
+        let log = g:projective_make_dir . '/' . g:projective_verilog_log_file
 	let lines = Projective_system('grep "\*[EF]," ' . log)
     endif
 
@@ -50,7 +50,7 @@ func! s:make_post()
 		if m[3] == ''
 		    let m[3] = 0
 		endif
-		let fname = (m[1] =~ '^[/~$]' ? m[1] : expand(g:projective_make_dir . '/' . m[1]))
+		let fname = (m[1] =~ '^[/~$]' ? m[1] : g:projective_make_dir . '/' . m[1])
 		call add(my_qf, {'filename': fname, 'lnum': m[2], 'col': m[3]+1, 'text': m[4], 'type': 'E'})
 	    else
 		call add(my_qf, {'text': matchstr(l, '\*[EF],.*'), 'type': 'E'})
@@ -197,8 +197,8 @@ func! verilog#Projective_init()
         call mkdir(s:syntax_check_dir)
     endif
 
-    let s:tree_file = expand(g:projective_make_dir . '/scope_tree.txt')
-    let s:search_inst_file = expand(g:projective_make_dir . '/scope_search.txt')
+    let s:tree_file = g:projective_make_dir . '/scope_tree.txt'
+    let s:search_inst_file = g:projective_make_dir . '/scope_search.txt'
     let s:design_loaded = (glob(s:tree_file) != '')
     if s:design_loaded
         call Projective_load_tree('tree.p')
@@ -329,7 +329,7 @@ func! s:generate_tree()
         call s:console_msg('')
         call s:console_msg('Starting SimVision...')
         let cmdf = s:set_cmd_file([s:simvision_tree_cmd . ' -input projective.tcl'], 'simvision_get_tree.sh')
-        let file = expand(g:projective_make_dir . '/projective.tcl')
+        let file = g:projective_make_dir . '/projective.tcl'
         call writefile(['print_scope_tree -include cells', 'exit'], file)
         "call writefile(['print_scope_tree', 'exit'], file)
         call s:console_send_job(g:projective_verilog_drm_cmd . ' ' . cmdf)

@@ -21,6 +21,8 @@ if !exists('projective_tree_sp_mod')
     let projective_tree_sp_mod = 'vert to 45'
 endif
 
+let projective_dir = expand(projective_dir)
+
 augroup projective_commands
     au!
     au VimLeave * if exists('g:projective_project_type')
@@ -70,11 +72,10 @@ func! Projective_make(clean)
 
     let cmd = a:clean ? g:projective_make_clean_cmd : g:projective_make_cmd
     if g:projective_make_dir != ''
-	let dir = expand(g:projective_make_dir)
-	if !isdirectory(dir)
-	    call mkdir(dir)
+	if !isdirectory(g:projective_make_dir)
+	    call mkdir(g:projective_make_dir)
 	endif
-	let cmd = 'cd ' . dir . '; ' . cmd
+	let cmd = 'cd ' . g:projective_make_dir . '; ' . cmd
     endif
 
     call Projective_run_job(cmd, function('s:make_cb'), g:projective_make_console ? 'make' : '')
@@ -250,7 +251,7 @@ func! Projective_get_files()
 endfunc
 
 func! Projective_path(fname)
-    return expand(g:projective_dir . '/' . g:projective_project_name . '/' . a:fname)
+    return g:projective_dir . '/' . g:projective_project_name . '/' . a:fname
 endfunc
 
 func! Projective_save_file(flines, fname)
