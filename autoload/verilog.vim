@@ -199,7 +199,7 @@ func! verilog#Projective_init()
 
     let s:tree_file = g:projective_make_dir . '/scope_tree.txt'
     let s:search_inst_file = g:projective_make_dir . '/scope_search.txt'
-    let s:design_loaded = (glob(s:tree_file) != '')
+    let s:design_loaded = !empty(s:modules) && (glob(s:tree_file) != '')
     if s:design_loaded
         call Projective_load_tree('tree.p')
         if Projective_is_empty_tree()
@@ -402,7 +402,7 @@ func! s:refresh_tree()
     if s:search_inst_active
         return
     endif
-    let s:design_loaded = (glob(s:tree_file) != '')
+    let s:design_loaded = !empty(s:modules) && (glob(s:tree_file) != '')
     if s:design_loaded
         call s:new_tree(2)
     endif
