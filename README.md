@@ -32,8 +32,8 @@ set rtp+=~/.vim/agrep
 ```
 
 **Set up a new project**  
-Open the projects menu with `<leader>s `.
-Note: `<leader>` is backslash by default so we will use `\` here. See `:h leader` for more details.
+Open the projects menu with `<leader>s `.  
+Note: `<leader>` is backslash by default so we will use `\` here. See `:h leader` for more details.  
 Type `<C-n>` to create a new project and choose your project's language from the list. You'll be asked to enter a name for the project -use any name and hit `<Enter>`. A new tab will be opened with a template configuration file called `init.vim` for the project. Edit the following settings:
 ```viml
 let projective_project_type = 'verilog'
