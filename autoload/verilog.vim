@@ -726,14 +726,18 @@ func! s:signal_direction(tid)
     if signal != s:prev_signal
         let s:prev_signal = signal
         let cmd = 'grep -E ''^\s*,?\s*(input|output|inout)\>.*\<' . signal . '\>'' ' . s:hl_scope_file
-        call job_start(['sh', '-c', cmd], {'close_cb': function('s:signal_direction_cb')})
+        call job_start(['sh', '-c', cmd], {'close_cb': function('s:signal_direction_cb', [signal])})
     endif
 endfunc
 
-func! s:signal_direction_cb(channel)
+func! s:signal_direction_cb(signal, channel)
     let dir = ''
     while ch_status(a:channel) == 'buffered'
-        let m = matchstr(ch_read(a:channel), 'input\|output\|inout')
+        let l = substitute(ch_read(a:channel), '//.*', '', '')
+        if l !~ '\<' . a:signal . '\>'
+            continue
+        endif
+        let m = matchstr(l, 'input\|output\|inout')
         if dir != '' && m != dir
             let dir = ''
             break
