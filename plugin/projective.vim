@@ -137,7 +137,7 @@ func! s:fuzzy_find(name, list, file, ops)
     if a:file != ''
         let listf = a:file
     else
-        let listf = g:projective_dir . '/fuzzy.p'
+        let listf = Projective_path('/fuzzy.p')
         call writefile(a:list, listf)
     endif
     setlocal modifiable
@@ -190,6 +190,9 @@ func! s:fuzzy_find(name, list, file, ops)
         let ch = s:get_char(a:ops)
     endwhile
     call job_stop(job)
+    if a:file == ''
+        call delete(listf)
+    endif
     setlocal nomodifiable
     call clearmatches()
     let id = line('.') - 1
@@ -303,6 +306,12 @@ func! Projective_ch_send(msg)
     call ch_sendraw(g:projective_ch, a:msg . "\n")
 endfunc
 
+func! s:check_dir()
+    if !isdirectory(g:projective_dir)
+        call mkdir(g:projective_dir)
+    endif
+endfunc
+
 """"""""""""""""""""""""""""""""""""""""""""""""
 " Projective menu
 """"""""""""""""""""""""""""""""""""""""""""""""
@@ -312,6 +321,7 @@ command! -nargs=? Projective :call s:project_init(<q-args>)
 let g:projective_project_name = ''
 
 func! s:menu()
+    call s:check_dir()
     let gl = glob(g:projective_dir . '/*/init.vim', 1, 1)
     let projects = map(gl, {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
     let ops = { "\<CR>": function('s:project_init'),
@@ -370,6 +380,7 @@ func! Projective_system(cmd)
 endfunc
 
 func! s:project_init(name)
+    call s:check_dir()
     if exists('g:projective_project_type')
 	exe 'call' g:projective_project_type . '#Projective_cleanup()'
     endif
