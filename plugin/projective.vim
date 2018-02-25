@@ -119,7 +119,7 @@ func! s:get_char(ops)
         if type(ch) != v:t_string
             let ch = nr2char(ch)
         endif
-        if ch =~ '[a-zA-Z0-9_.-]' || has_key(s:special_ch, ch) || has_key(a:ops, ch)
+        if getcharmod() == 0 && ch =~ '[a-zA-Z0-9_.-]' || has_key(s:special_ch, ch) || has_key(a:ops, ch)
             return ch
         endif
     endwhile
