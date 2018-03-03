@@ -25,9 +25,7 @@ let projective_dir = expand(projective_dir)
 
 augroup projective_commands
     au!
-    au VimLeave * if exists('g:projective_project_type')
-                \ | exe 'call' g:projective_project_type . '#Projective_cleanup()'
-                \ | endif
+    au VimLeave * call s:project_cleanup()
     au ColorScheme * call s:save_cursor_hl()
 augroup END
 
@@ -316,32 +314,65 @@ endfunc
 " Projective menu
 """"""""""""""""""""""""""""""""""""""""""""""""
 map <silent> <leader>s :call <SID>menu()<CR>
-command! -nargs=? Projective :call s:project_init(<q-args>)
-
-let g:projective_project_name = ''
+command! -nargs=? -bang Projective :if <bang>0 | call s:project_cleanup() | else | call s:project_init(<q-args>) | endif
 
 func! s:menu()
     call s:check_dir()
     let gl = glob(g:projective_dir . '/*/init.vim', 1, 1)
     let projects = map(gl, {k, v -> matchstr(v, '[^/]*\ze/init\.vim')})
-    let ops = { "\<CR>": function('s:project_init'),
-                \ "\<C-e>": function('s:edit_project'),
-                \ "\<C-n>": function('s:new_project')}
-    call s:fuzzy_find('Projective-menu', projects, '', ops)
+    if empty(projects)
+        let input = s:input('There are no projects yet. Do you want to set up a project (y/n)? ')
+        if input == 'y' || input == 'yes'
+            call s:project_new()
+        endif
+    else
+        let ops = { "\<CR>": function('s:project_init'),
+                    \ "\<C-e>": function('s:project_edit'),
+                    \ "\<C-d>": function('s:project_delete'),
+                    \ "\<C-r>": function('s:project_rename'),
+                    \ "\<C-n>": function('s:project_new')}
+        call s:fuzzy_find('Projective-menu', projects, '', ops)
+    endif
 endfunc
 
-func! s:edit_project(name)
-    let saved_p = g:projective_project_name
-    let g:projective_project_name = a:name
-    exe 'tabe' Projective_path('init.vim')
-    let g:projective_project_name = saved_p
+func! s:project_edit(name)
+    exe 'tabe' g:projective_dir . '/' . a:name . '/init.vim'
     augroup project_init_command
         au!
         exe 'au BufWritePost <buffer> call s:project_init("' . a:name . '")'
     augroup END
 endfunc
 
-func! s:new_project(...)
+func! s:project_delete(name)
+    let input = s:input('Are you sure you want to delete ' . a:name. ' (yes/no)? ')
+    if input != 'yes' || g:projective_dir == '' || a:name == ''
+        return
+    endif
+    if a:name == g:projective_project_name
+        call s:project_cleanup()
+    endif
+    call delete(g:projective_dir . '/' . a:name, 'rf')
+    call s:menu()
+endfunc
+
+func! s:project_rename(name)
+    let new_name = s:input('Enter a new name for ' . a:name . ': ')
+    if new_name == ''
+        return
+    endif
+    let init = 0
+    if a:name == g:projective_project_name
+        call s:project_cleanup()
+        let init = 1
+    endif
+    call Projective_system('mv ' . g:projective_dir . '/' . a:name . ' ' . g:projective_dir . '/' . new_name)
+    if init
+        call s:project_init(new_name)
+    endif
+    call s:menu()
+endfunc
+
+func! s:project_new(...)
     if !exists('s:plugin_dir')
         let s:plugin_dir = globpath(&rtp, 'projective')
     endif
@@ -352,14 +383,14 @@ func! s:new_project(...)
 endfunc
 
 func! s:create_proj(lang)
-    let name = input("Enter project name: ")
+    let name = s:input("Enter project name: ")
     if name == ''
         return
     endif
     let proj_dir = g:projective_dir . '/' . name
     call system('mkdir ' . proj_dir)
     call system('cp ' . s:plugin_dir . '/languages/' . a:lang . '/init.template ' . proj_dir . '/init.vim')
-    call s:edit_project(name)
+    call s:project_edit(name)
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
@@ -379,19 +410,29 @@ func! Projective_system(cmd)
     return out
 endfunc
 
-func! s:project_init(name)
-    call s:check_dir()
-    if exists('g:projective_project_type')
-	exe 'call' g:projective_project_type . '#Projective_cleanup()'
+func! s:project_cleanup()
+    if g:projective_project_type != ''
+        exe 'call' g:projective_project_type . '#Projective_cleanup()'
+        let g:projective_project_type = ''
     endif
     let g:Projective_after_make         = s:empty_func
     let g:Projective_before_make        = s:empty_func
     let g:Projective_tree_init_node     = s:empty_func
     let g:Projective_tree_user_mappings = s:empty_func " TODO use API and remove when doing cleanup
+    let g:projective_project_name = ''
+    let s:files = []
+endfunc
 
-    if a:name != ''
-        let g:projective_project_name = a:name
+func! s:project_init(name)
+    if a:name == ''
+        if g:projective_project_name == ''
+            return
+        endif
+        let saved_project = g:projective_project_name
     endif
+    call s:check_dir()
+    call s:project_cleanup()
+    let g:projective_project_name = (a:name != '' ? a:name : saved_project)
     let s:files = Projective_read_file('files.p')
     exe 'source' Projective_path('init.vim')
     let g:projective_make_dir = expand(g:projective_make_dir)
@@ -441,6 +482,12 @@ func! s:close_window(bufname)
     if winnr > 0
 	exe winnr . 'close'
     endif
+endfunc
+
+func! s:input(msg)
+    let input = input(a:msg)
+    redr!
+    return input
 endfunc
 
 """"""""""""""""""""""""""""""""""""""""""""""""
@@ -747,3 +794,7 @@ func! Projective_init_recursively(limit)
     call s:node_count_(g:nodes[0], a:limit)
     let s:auto_tree_init = 0
 endfunc
+
+" init
+let projective_project_type = ''
+call s:project_cleanup()
