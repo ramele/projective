@@ -619,9 +619,9 @@ endfunc
 
 func! s:check_design(verify_scope)
     if !s:design_loaded
-        echohl WarningMsg | echo  'Design is not loaded. Run :UpdateDesign first' | echohl None
+        echohl WarningMsg | echo 'Design is not loaded. Run :UpdateDesign first' | echohl None
     elseif a:verify_scope && empty(s:scope)
-        echohl WarningMsg | echo  'Can''t detect design scope' | echohl None
+        echohl WarningMsg | echo 'Can''t detect design scope' | echohl None
     else
         return 1
     endif
@@ -629,7 +629,8 @@ func! s:check_design(verify_scope)
 endfunc
 
 func! s:cursor_on_searched_signal()
-    return getline('.')[col('.')-2] !~ '\w' && getline('.')[(col('.')-1):] =~ '^' . @/
+    let word = matchstr(getline('.'), '\w*\%' . col('.') . 'c\w\+')
+    return word =~ @/ && @/[0:1] == '\<' && @/[-2:-1] == '\>'
 endfunc
 
 func! s:scope_up()
@@ -639,7 +640,7 @@ func! s:scope_up()
     let inst_name = s:scope.name
     let node = Projective_get_parent(s:scope)
     if empty(node)
-        echohl WarningMsg | echo  'Already at the top hierarchy' | echohl None
+        echohl WarningMsg | echo 'Already at the top hierarchy' | echohl None
     else
         let auto_search = 0
         if g:projective_verilog_smart_search && s:cursor_on_searched_signal()
@@ -657,9 +658,10 @@ func! s:scope_up()
                 endfor
                 call cursor(inst_lnr, 1)
                 if auto_search
-                    let signal_lnr = search('\.' . @/, 'n')
+                    let pat = '\.' . @/ . '[^(]*(\s*\zs\w'
+                    let signal_lnr = search(pat, 'n')
                     if get(s:instances, signal_lnr, '') == inst_name
-                        call search('\.' . @/ . '[^(]*(\s*\zs\w')
+                        call search(pat)
                         let @/ = '\<' . matchstr(getline('.')[(col('.')-1):], '\w\+') . '\>'
                         call histadd('/', @/)
                     endif
@@ -682,11 +684,11 @@ func! s:scope_down()
     else
         let auto_search = 0
         if g:projective_verilog_smart_search && s:cursor_on_searched_signal()
-            if getline('.')[col('.')-2] == '('
-                let signal = matchstr(getline('.')[:(col('.')-2)], '.*\.\zs\w\+')
+            if getline('.')[0:col('.')-2] =~ '([^)]*$'
+                let signal = '\<' . matchstr(getline('.')[:(col('.')-2)], '.*\.\zs\w\+') . '\>'
                 let auto_search = 1
-            elseif getline('.')[col('.')-2] == '.'
-                let signal = matchstr(getline('.'), '\%' . col('.') . 'c\w*')
+            elseif getline('.')[0:col('.')-2] =~ '\.\w*$'
+                let signal = @/
                 let auto_search = 1
             endif
         endif
@@ -694,7 +696,7 @@ func! s:scope_down()
         call s:edit_scope(node, 'e')
         if auto_search
             call cursor(1,1)
-            call feedkeys('/\<' . signal . '\>' . "\<CR>", 'n')
+            call feedkeys('/' . signal . "\<CR>", 'n')
         endif
     endif
 endfunc
@@ -1016,6 +1018,6 @@ func! s:simvision_connect_try(port, timer)
     endif
 endfunc
 
-"func! Get_sid(var)
-"    exe 'echo s:' . a:var
-"endfunc
+" func! Get_sid(var)
+"    exe 'return s:' . a:var
+" endfunc
