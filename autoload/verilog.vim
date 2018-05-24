@@ -650,12 +650,16 @@ func! s:scope_up()
         let timeout = 1000
         while timeout
             if s:instances_map_valid
+                let inst_lnr = 0
                 for i in range(1, line('$'))
                     if get(s:instances, i, '') == inst_name
                         let inst_lnr = i
                         break
                     endif
                 endfor
+                if !inst_lnr
+                    break
+                endif
                 call cursor(inst_lnr, 1)
                 if auto_search
                     let pat = '\.' . @/ . '[^(]*(\s*\zs\w'
