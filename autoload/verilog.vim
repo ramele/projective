@@ -445,7 +445,7 @@ endfunc
 func! s:get_module_file(module)
     let i = get(s:modules, a:module, -1)
     if i > -1
-        return s:files[i]
+        return glob(s:files[i])
     else
         return ''
     endif
