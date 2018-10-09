@@ -374,7 +374,7 @@ endfunc
 
 func! s:project_new(...)
     if !exists('s:plugin_dir')
-        let s:plugin_dir = globpath(&rtp, 'projective')
+        let s:plugin_dir = filter(split(&rtp, ','), {i, v -> v =~ '\/projective$'})[0]
     endif
     let lang_path = glob(s:plugin_dir . '/languages/*', 1, 1)
     let lang = map(lang_path, {k, v -> substitute(v, '.*/', '', '')})
