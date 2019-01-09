@@ -725,10 +725,8 @@ func! s:signal_direction(tid)
         return
     endif
     let s:moved = 0
-    let signal = matchstr(getline('.'), '\.\zs\w\+\ze\s*([^)]*\%' . col('.') . 'c')
-    if signal == ''
-        let signal = matchstr(getline('.'), '\.\zs\w\+\ze\s*(')
-    endif
+    let c = match(getline('.'), '\.[^.]*\%' . col('.') . 'c') + 1
+    let signal = matchstr(getline('.'), '\%' . c . 'c\.\zs\w\+')
     if signal != s:prev_signal
         let s:prev_signal = signal
         let cmd = 'grep -E ''^\s*,?\s*(input|output|inout)\>.*\<' . signal . '\>'' ' . s:hl_scope_file
@@ -993,7 +991,7 @@ func! s:simvision_connect(db)
     endif
     call writefile(['startServer ' . simvision_port], file)
 
-    let cmd = (a:db == '' ? 'cd ' . g:projective_make_dir . ';' : '') .
+    let cmd = 'cd ' . g:projective_make_dir . ';' .
                 \ ' simvision ' . s:flag_64 . '-nosplash' .
                 \ ' -input ' . s:cdn_dir . '/server.tcl' .
                 \ ' -input ' . file .

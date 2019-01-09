@@ -43,20 +43,23 @@ func! s:read_sn_logfile()
 	elseif s:lines[s:lnum] =~ '\C^\s*\*\*\* \(Dut e\|E\)rror'
 	    if s:lines[s:lnum] =~ ': Contradiction'
 		let msg = s:get_text('^\s*that obey the constraints:', 0)
-		let first = {'text': msg, 'type': 'C'}
-		call add(my_qf, first)
-		let s:lnum += 2
-		let j = 1
-		while 1
-		    let errl = s:get_text('\v\@\w+\s*(,\s*)?$', 1)
-		    let m = matchlist(errl, '\v(.*)<at line (\d+) in \@(\f+)')
-		    call add(my_qf, {'filename': e_modules[m[3]], 'lnum': m[2], 'text': m[1], 'type': 'C', 'nr': j})
-		    if errl !~ ',\s*$' | break | endif
-		    let s:lnum += 1
-		    let j += 1
-		endwhile
-		let first.filename = my_qf[-1].filename
-		let first.lnum = my_qf[-1].lnum
+                    let first = {'text': msg, 'type': 'C'}
+                    call add(my_qf, first)
+                    let s:lnum += 2
+                    let j = 1
+                    while 1
+                        let errl = s:get_text('\v\@\w+\s*(,\s*)?$', 1)
+                        let m = matchlist(errl, '\v(.*)<at line (\d+) in \@(\f+)')
+                        if empty(m) | break | endif
+                        call add(my_qf, {'filename': e_modules[m[3]], 'lnum': m[2], 'text': m[1], 'type': 'C', 'nr': j})
+                        if errl !~ ',\s*$' | break | endif
+                        let s:lnum += 1
+                        let j += 1
+                    endwhile
+                    if !empty(m)
+                        let first.filename = my_qf[-1].filename
+                        let first.lnum = my_qf[-1].lnum
+                    endif
 	    else
 		let msg = s:get_text('\sat line\>', 0)
 		let s:lnum += 1

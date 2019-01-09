@@ -69,12 +69,13 @@ func! Projective_make(clean)
     call g:Projective_before_make(a:clean)
 
     let cmd = a:clean ? g:projective_make_clean_cmd : g:projective_make_cmd
-    if g:projective_make_dir != ''
-	if !isdirectory(g:projective_make_dir)
-	    call mkdir(g:projective_make_dir)
-	endif
-	let cmd = 'cd ' . g:projective_make_dir . '; ' . cmd
+    if !isdirectory(g:projective_make_dir)
+        call mkdir(g:projective_make_dir)
+        if !isdirectory(g:projective_make_dir)
+            return
+        endif
     endif
+    let cmd = 'cd ' . g:projective_make_dir . '; ' . cmd
 
     call Projective_run_job(cmd, function('s:make_cb'), g:projective_make_console ? 'make' : '')
 endfunc
@@ -374,6 +375,7 @@ endfunc
 
 func! s:project_new(...)
     if !exists('s:plugin_dir')
+        " TODO always use this as projective's root
         let s:plugin_dir = filter(split(&rtp, ','), {i, v -> v =~ '\/projective$'})[0]
     endif
     let lang_path = glob(s:plugin_dir . '/languages/*', 1, 1)
