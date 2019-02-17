@@ -13,11 +13,7 @@ func! s:tool_str(str)
 endfunc
 
 func! s:set_make(clean)
-    if a:clean
-        let s:files = []
-        let s:modules = {}
-        call Projective_save_file([], s:tool_str('%vlog/%vlog.args'))
-    endif
+    let s:clean = a:clean
 endfunc
 
 let s:pending_make_errors = 0
@@ -39,6 +35,10 @@ func! s:make_post()
 	let lines = readfile(s:tool_str(s:syntax_check_dir . '/%vlog.log'))
     else
         let log = g:projective_make_dir . '/' . g:projective_verilog_log_file
+        if glob(log) == ''
+            echoerr 'log file ' . log . ' does not exist'
+            return
+        endif
 	let lines = Projective_system('grep "\*[EF]," ' . log)
     endif
 
@@ -62,6 +62,11 @@ func! s:make_post()
         let [g:projective_make_dir, g:projective_make_cmd, g:projective_make_console] = s:saved_make_opts
         let s:syntax_check = 0
     elseif empty(my_qf)
+        if s:clean
+            let s:files = []
+            let s:modules = {}
+            call Projective_save_file([], s:tool_str('%vlog/%vlog.args'))
+        endif
         " TODO add job handle
         call job_start(['/bin/sh', '-c',
                     \ 'grep "^file:\|^\s*module\>" ' . log . ' | sed "s/^file: /-/; s/^\s*module \w*\.\(\w*\):.*/\1/"'],
@@ -629,8 +634,7 @@ func! s:check_design(verify_scope)
 endfunc
 
 func! s:cursor_on_searched_signal()
-    let word = matchstr(getline('.'), '\w*\%' . col('.') . 'c\w\+')
-    return word =~ @/ && @/[0:1] == '\<' && @/[-2:-1] == '\>'
+    return expand('<cword>') =~ @/ && @/[0:1] == '\<' && @/[-2:-1] == '\>'
 endfunc
 
 func! s:scope_up()
@@ -838,7 +842,7 @@ func! s:select_cur_design_obj(mode)
             endfor
         endfor
     else
-        let ids = [matchstr(getline('.'), '\w*\%' . col('.') . 'c\w*')]
+        let ids = [expand('<cword>')]
     endif
     let selection = ''
     for id in ids

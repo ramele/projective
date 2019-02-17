@@ -65,13 +65,14 @@ endfunc
 command! -bang Make :call Projective_make(<bang>0)
 
 func! Projective_make(clean)
-    cclo
+    cclose
     call g:Projective_before_make(a:clean)
 
     let cmd = a:clean ? g:projective_make_clean_cmd : g:projective_make_cmd
     if !isdirectory(g:projective_make_dir)
         call mkdir(g:projective_make_dir)
         if !isdirectory(g:projective_make_dir)
+            echoerr "couldn't create " . g:projective_make_dir . " directory"
             return
         endif
     endif
