@@ -1,6 +1,8 @@
 # Projective
 ### Real IDE in Vim
 
+[![projective](https://i.imgur.com/vxuDYQq.png)](https://youtu.be/BIEKhAvUzSA)
+
 _**This plugin is under development**_
 
 #### Supported languages (so far):
