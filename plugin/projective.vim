@@ -20,6 +20,9 @@ endif
 if !exists('projective_tree_sp_mod')
     let projective_tree_sp_mod = 'vert to 45'
 endif
+if !exists('projective_fuz_match_hl')
+    let projective_fuz_match_hl = 'Title'
+endif
 
 let projective_dir = expand(projective_dir)
 
@@ -36,7 +39,7 @@ func! s:save_cursor_hl()
 endfunc
 
 func! s:hide_cursor()
-    hi! link Cursor Conceal
+    hi clear Cursor
 endfunc
 
 func! s:show_cursor()
@@ -180,7 +183,7 @@ func! s:fuzzy_find(name, list, file, ops)
             let i = 0
             let hl = '\V\c\.\*' . substitute(filter_str, '.', '&\\.\\{-}', 'g')
             while i < len(filter_str)
-                call matchadd('Title', substitute(hl, '\%'. (9+i*7) . 'c.', '\\zs&\\ze', '')) 
+                call matchadd(g:projective_fuz_match_hl, substitute(hl, '\%'. (9+i*7) . 'c.', '\\zs&\\ze', '')) 
                 let i += 1
             endwhile
         endif
@@ -526,15 +529,15 @@ func! Projective_open_tree_browser()
     map <silent> <buffer> <2-LeftMouse> : call <SID>toggle_node_under_cursor()<CR>
 
     " u25B6, u25FF
-    syn match tree_icon    "[▶◿⎘]"
-    syn match tree_conceal "[|!:]"    conceal contained
-    syn match tree_hl1     "![^!]\+!" contains=tree_conceal
-    syn match tree_hl2     ":[^:]\+:" contains=tree_conceal
-    syn match tree_hl3     "|[^|]\+|" contains=tree_conceal
-    hi def link tree_hl1   Question
-    hi def link tree_hl2   CursorLineNr
-    hi def link tree_hl3   Directory
-    hi def link tree_icon  Statement
+    syn match ProjectiveTreeIcon    "[▶◿⎘]"
+    syn match ProjectiveTreeConceal "[|!:]"    conceal contained
+    syn match ProjectiveTreeHl1     "![^!]\+!" contains=ProjectiveTreeConceal
+    syn match ProjectiveTreeHl2     ":[^:]\+:" contains=ProjectiveTreeConceal
+    syn match ProjectiveTreeHl3     "|[^|]\+|" contains=ProjectiveTreeConceal
+    hi def link ProjectiveTreeHl1   Question
+    hi def link ProjectiveTreeHl2   CursorLineNr
+    hi def link ProjectiveTreeHl3   Directory
+    hi def link ProjectiveTreeIcon  Statement
 
     "TODO add user mappings API
     call g:Projective_tree_user_mappings()

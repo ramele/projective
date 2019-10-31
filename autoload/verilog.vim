@@ -259,6 +259,9 @@ endfunc
 
 func! verilog#Projective_cleanup()
     au! projective_verilog_commands
+    if s:sv_cursor_active
+        call s:toggle_sv_cursor_bind()
+    endif
     if exists('g:simvision_ch') && ch_status(g:simvision_ch) == 'open'
         call ch_close(g:simvision_ch)
     endif
@@ -741,7 +744,7 @@ endfunc
 func! s:signal_direction_cb(signal, channel)
     let dir = ''
     while ch_status(a:channel) == 'buffered'
-        let l = substitute(ch_read(a:channel), '//.*', '', '')
+        let l = substitute(ch_read(a:channel), '//.*\|/\*.*', '', '')
         if l !~ '\<' . a:signal . '\>'
             continue
         endif
