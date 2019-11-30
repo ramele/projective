@@ -1,0 +1,22 @@
+" projective generic init file
+" (Generic files collection + ctags support)
+""""""""""""""""""""""""""""
+let projective_project_type = 'generic'
+
+" Use simple script to extract project files (will be uniquify automatically)
+let projective_make_cmd = 'extract_files.sh $SIM'
+
+" Define how to run a clean build (when you call :Make! -with '!'):
+let projective_make_clean_cmd = projective_make_cmd
+
+" Can be placed anywhere (if the script above does not produce any files)
+let projective_make_dir = '~'
+
+" ctags command (default: ctags)
+let projective_ctags_cmd = 'ctags'
+
+" Where to put tags file
+let projective_ctags_root = '$PROJECT'
+
+" ctags languages
+let projective_ctags_lang = 'systemverilog'
