@@ -1,11 +1,8 @@
 " Projective generic project extension
 " (Generic files collection + ctags support)
 """""""""""""""""""""""""""""""
-if !exists('projective_ctags_root')
-    let projective_ctags_cmd = 'ctags'
-endif
-if !exists('projective_ctags_root')
-    let projective_ctags_root = ''
+if !exists('projective_ctags_cmd')
+    let projective_ctags_cmd = ''
 endif
 if !exists('projective_ctags_lang')
     let projective_ctags_lang = 'C'
@@ -38,15 +35,10 @@ func! s:get_files_uniq()
 endfunc
 
 func! s:generate_tags()
-    if g:projective_ctags_root == ''
+    if g:projective_ctags_cmd == ''
         return
     endif
-    let tags = glob(g:projective_ctags_root) . '/tags'
-    if tags == '/tags'
-        echoerr 'ctags root directory does not exist' 
-        return
-    endif
-    let g:cmd = g:projective_ctags_cmd . ' --languages=' . g:projective_ctags_lang . ' -f ' . tags . ' -L ' . Projective_path('files.p')
+    let g:cmd = g:projective_ctags_cmd . ' --languages=' . g:projective_ctags_lang . ' -f ' . Projective_path('tags') . ' -L ' . Projective_path('files.p')
     call Projective_run_job(g:cmd, {-> execute("echo 'tags done!'")}, 'tags')
 endfunc
 
@@ -58,10 +50,11 @@ endfunc
 func! generic#Projective_init()
     let g:Projective_before_make = function('s:set_make')
     let g:Projective_after_make = function('s:post_make')
+    let &tags = Projective_path('tags') . ',' . &tags
 endfunc
 
 func! generic#Projective_cleanup()
     unlet g:projective_ctags_cmd
-    unlet g:projective_ctags_root
     unlet g:projective_ctags_lang
+    let &tags = substitute(&tags, Projective_path('tags') . ',', '', '')
 endfunc

@@ -15,8 +15,6 @@ let projective_make_dir = '~'
 " ctags command (default: ctags)
 let projective_ctags_cmd = 'ctags'
 
-" Where to put tags file
-let projective_ctags_root = '$PROJECT'
-
 " ctags languages
 let projective_ctags_lang = 'systemverilog'
+
